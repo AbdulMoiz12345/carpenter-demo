@@ -1,0 +1,76 @@
+{
+  "slug": "oakline-carpentry",
+  "domain": "oakline-carpentry.demo.localhost",
+  "company": "Oakline Carpentry",
+  "short": "Oakline",
+  "headline": [
+    "Custom carpentry",
+    "and cabinetry in Plano"
+  ],
+  "tagline": "",
+  "city": "Plano",
+  "nearby": [
+    "Frisco",
+    "Allen",
+    "Richardson"
+  ],
+  "phone": "(972) 555-0142",
+  "since": 2011,
+  "rating": "",
+  "reviews": 0,
+  "logo": {
+    "type": "wordmark"
+  },
+  "colors": {
+    "primary": "#7a4b24"
+  },
+  "services": [
+    {
+      "name": "Custom Closets",
+      "tag": ""
+    },
+    {
+      "name": "Built-Ins",
+      "tag": ""
+    },
+    {
+      "name": "Cabinetry",
+      "tag": ""
+    },
+    {
+      "name": "Baseboards",
+      "tag": ""
+    },
+    {
+      "name": "Interior Doors",
+      "tag": ""
+    },
+    {
+      "name": "Railings",
+      "tag": ""
+    }
+  ],
+  "work": [
+    {
+      "title": "Custom closet build-out",
+      "where": "Plano"
+    },
+    {
+      "title": "Kitchen cabinet install",
+      "where": "Plano"
+    },
+    {
+      "title": "Stair railing and trim",
+      "where": "Plano"
+    }
+  ],
+  "ghl": {},
+  "status": "ACTIVE",
+  "source": "website",
+  "meta": {
+    "origin_url": "file://samples/oakline.html",
+    "color_from": "theme-color",
+    "logo_from": "generated (offline mode)",
+    "content_from": "no-api-key"
+  }
+}

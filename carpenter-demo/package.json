@@ -1,0 +1,33 @@
+{
+  "name": "carpenter-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql",
+    "leakcheck": "grep -rIlE 'GHL_TOKEN|ADMIN_TOKEN|ANTHROPIC_API_KEY|pit-|sk-ant|postgres://|leadconnectorhq' .next/static/ && echo LEAK && exit 1 || echo clean"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
+    "@vercel/blob": "^2.8.0",
+    "cheerio": "^1.2.0",
+    "next": "14.2.5",
+    "pg": "^8.23.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@types/pg": "^8.23.1",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "typescript": "5.5.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

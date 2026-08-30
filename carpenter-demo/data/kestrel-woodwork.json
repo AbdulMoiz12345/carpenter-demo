@@ -1,0 +1,55 @@
+{
+  "slug": "kestrel-woodwork",
+  "domain": "kestrel-woodwork.demo.localhost",
+  "company": "Kestrel Woodwork",
+  "short": "Kestrel",
+  "headline": [
+    "Custom carpentry",
+    "and cabinetry in Denton"
+  ],
+  "tagline": "",
+  "city": "Denton",
+  "nearby": [
+    "Argyle",
+    "Sanger"
+  ],
+  "phone": "(940) 555-0188",
+  "since": 2018,
+  "rating": "",
+  "reviews": 0,
+  "logo": {
+    "type": "wordmark"
+  },
+  "colors": {
+    "primary": "#f2d14a"
+  },
+  "services": [
+    {
+      "name": "Framing",
+      "tag": ""
+    }
+  ],
+  "work": [
+    {
+      "title": "Custom closet build-out",
+      "where": "Denton"
+    },
+    {
+      "title": "Kitchen cabinet install",
+      "where": "Denton"
+    },
+    {
+      "title": "Stair railing and trim",
+      "where": "Denton"
+    }
+  ],
+  "ghl": {},
+  "status": "ACTIVE",
+  "source": "website",
+  "meta": {
+    "origin_url": "file://samples/pale-brand.html",
+    "color_from": "theme-color",
+    "logo_from": "generated (offline mode)",
+    "content_from": "no-api-key"
+  }
+}
