@@ -28,5 +28,30 @@ export async function resolveTenant(searchParams?: { t?: string }): Promise<Tena
   return getByHost(h.get('host'));
 }
 
+/**
+ * Resolve a tenant for an API call made from a /d/<slug> page.
+ *
+ * Path-mode demos have no distinguishing hostname — every one of them
+ * is served from the same *.vercel.app — so the slug has to come from
+ * the request. That means trusting a value the browser supplied, which
+ * is normally forbidden.
+ *
+ * It is gated behind STUDIO_ENABLED for exactly that reason: path mode
+ * exists for internal demos and video calls, where every sub-account is
+ * one Caito360 owns. Once real prospects have links, STUDIO_ENABLED goes
+ * off, path mode goes with it, and hostname becomes the only trust
+ * anchor again.
+ */
+export async function resolveTenantForApi(req: Request): Promise<Tenant | null> {
+  const byHost = await resolveTenant();
+  if (byHost) return byHost;
+
+  if (process.env.STUDIO_ENABLED === 'true') {
+    const slug = new URL(req.url).searchParams.get('d');
+    if (slug) return getBySlug(slug);
+  }
+  return null;
+}
+
 export { getByHost, getBySlug, listTenants };
 export const allTenants = listTenants;

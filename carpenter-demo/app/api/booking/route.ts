@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { resolveTenant } from '@/lib/tenants';
+import { resolveTenantForApi } from '@/lib/tenants';
 import {
   upsertContact,
   createAppointment,
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const limit = rateLimit(clientKey(req, 'booking'), 8);
   if (!limit.ok) return NextResponse.json({ error: 'Too many attempts.' }, { status: 429 });
 
-  const tenant = await resolveTenant();
+  const tenant = await resolveTenantForApi(req);
   if (!tenant) return NextResponse.json({ error: 'Unknown demo.' }, { status: 404 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));

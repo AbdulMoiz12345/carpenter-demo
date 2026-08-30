@@ -149,6 +149,11 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
                    placeholder="Oakline Carpentry" />
           </div>
           <div className="field">
+            <label className="mono" htmlFor="s-short">Short name</label>
+            <input id="s-short" value={d.short} onChange={(e) => set('short', e.target.value)}
+                   placeholder="Logan" />
+          </div>
+          <div className="field">
             <label className="mono" htmlFor="s-city">City</label>
             <input id="s-city" value={d.city} onChange={(e) => set('city', e.target.value)} placeholder="Plano" />
           </div>

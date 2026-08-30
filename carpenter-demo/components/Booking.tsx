@@ -14,6 +14,14 @@ type Msg = { text: string; bad?: boolean } | null;
  * there is nothing here for a prospect to find in devtools.
  */
 export default function Booking({ tenant, initialSlots }: { tenant: Tenant; initialSlots: Slot[] }) {
+  /**
+   * On a real demo subdomain the server knows the tenant from the
+   * hostname and this is ignored. It only matters for /d/<slug>, where
+   * every demo shares one hostname.
+   */
+  const q = typeof window !== 'undefined' && window.location.pathname.startsWith('/d/')
+    ? `?d=${encodeURIComponent(tenant.slug)}`
+    : '';
   const [slots, setSlots] = useState<Slot[]>(initialSlots);
   const [chosen, setChosen] = useState(0);
   const [name, setName] = useState('');
@@ -26,7 +34,7 @@ export default function Booking({ tenant, initialSlots }: { tenant: Tenant; init
 
   // Refresh availability from the server so slots are current at open.
   useEffect(() => {
-    fetch('/api/slots')
+    fetch(`/api/slots${q}`)
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d.slots) && d.slots.length) setSlots(d.slots); })
       .catch(() => { /* keep server-rendered slots */ });
@@ -55,7 +63,7 @@ export default function Booking({ tenant, initialSlots }: { tenant: Tenant; init
     if (!name.trim() || phone.trim().length < 6) {
       return setMsg({ text: 'Add your name and a mobile number.', bad: true });
     }
-    const data = await post('/api/enquiry', { name, phone, email: email || undefined, message, website }, 'enquiry');
+    const data = await post(`/api/enquiry${q}`, { name, phone, email: email || undefined, message, website }, 'enquiry');
     if (!data) return;
     setMsg({
       text: data.live
@@ -70,7 +78,7 @@ export default function Booking({ tenant, initialSlots }: { tenant: Tenant; init
     if (!name.trim() || phone.trim().length < 6) {
       return setMsg({ text: 'Add your name and mobile, then book.', bad: true });
     }
-    const data = await post('/api/booking', { name, phone, email: email || undefined, slotIso: slot.iso }, 'booking');
+    const data = await post(`/api/booking${q}`, { name, phone, email: email || undefined, slotIso: slot.iso }, 'booking');
     if (!data) return;
     setMsg({
       text: data.live

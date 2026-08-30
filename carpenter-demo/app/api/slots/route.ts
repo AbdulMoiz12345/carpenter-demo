@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveTenant } from '@/lib/tenants';
+import { resolveTenantForApi } from '@/lib/tenants';
 import { getLiveSlots } from '@/lib/ghl';
 import { seedFor } from '@/lib/seed';
 
@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
  * seeded otherwise. The response says which, so QA can tell the
  * difference and nobody demos seeded slots believing they're real.
  */
-export async function GET() {
-  const tenant = await resolveTenant();
+export async function GET(req: Request) {
+  const tenant = await resolveTenantForApi(req);
   if (!tenant) return NextResponse.json({ error: 'Unknown demo.' }, { status: 404 });
 
   const live = await getLiveSlots(tenant);

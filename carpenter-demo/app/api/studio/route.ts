@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { upsertTenant, usingDatabase } from '@/lib/store';
 import { isValidHex } from '@/lib/theme';
-import { slugify } from '@/lib/extract';
+import { slugify, shortName } from '@/lib/extract';
 import type { Tenant } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     status: 'ACTIVE' as const,
     source: 'website' as const,
     company: d.company,
-    short: (d.short || d.company.split(' ')[0]).slice(0, 16),
+    short: d.short?.trim() || shortName(d.company),
     headline: (d.headline ?? [
       'Custom carpentry',
       city ? `and cabinetry in ${city}` : 'and cabinetry'

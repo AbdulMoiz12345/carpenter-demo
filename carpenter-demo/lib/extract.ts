@@ -83,6 +83,23 @@ export interface Draft {
   notes: string[];
 }
 
+/**
+ * A short, human name for tight spaces — nav, SMS copy, the wordmark.
+ *
+ * Never truncates mid-word: "Loganconstructio" looks like a bug, which
+ * is worse than a name being slightly long. Run-on hostname guesses get
+ * split on capitals where possible ("LoganConstruction" -> "Logan").
+ */
+export function shortName(company: string): string {
+  const first = company.trim().split(/\s+/)[0];
+  if (first.length <= 18) return first;
+
+  const parts = first.replace(/([a-z])([A-Z])/g, '$1 $2').split(' ');
+  if (parts.length > 1 && parts[0].length >= 3) return parts[0];
+
+  return first;
+}
+
 export function slugify(name: string): string {
   const s = name
     .normalize('NFKD')
@@ -252,6 +269,7 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
   const guess = host
     .split('.')[0]
     .replace(/-/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
   const facts = await analyse(text, guess);
@@ -276,7 +294,7 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
 
   return {
     company: facts?.company || guess,
-    short: String(facts?.short || (facts?.company || guess).split(' ')[0]).slice(0, 16),
+    short: String(facts?.short || shortName(facts?.company || guess)),
     headline,
     tagline: facts?.tagline ?? '',
     city,

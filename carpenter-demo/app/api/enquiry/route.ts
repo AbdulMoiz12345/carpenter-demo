@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { resolveTenant } from '@/lib/tenants';
+import { resolveTenantForApi } from '@/lib/tenants';
 import { upsertContact, fireWorkflow, hasToken } from '@/lib/ghl';
 import { rateLimit, clientKey } from '@/lib/ratelimit';
 
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const tenant = await resolveTenant();
+  const tenant = await resolveTenantForApi(req);
   if (!tenant) return NextResponse.json({ error: 'Unknown demo.' }, { status: 404 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
