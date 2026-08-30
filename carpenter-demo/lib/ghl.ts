@@ -119,6 +119,8 @@ export async function healthCheck(tenant: Tenant) {
   const h = authHeaders();
   return {
     slug: tenant.slug,
+    // The dependable trigger. Without it, a workflow may never fire even
+    // though the contact write succeeded.
     hookConfigured: Boolean(tenant.ghl.enquiryHook ?? process.env.GHL_DEFAULT_ENQUIRY_HOOK),
     tokenConfigured: Boolean(h),
     locationBound: Boolean(tenant.ghl.locationId),

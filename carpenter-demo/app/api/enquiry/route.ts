@@ -11,14 +11,20 @@ export const dynamic = 'force-dynamic';
  * The lead form. The moment that proves the demo is real rather than
  * a screenshot: submit here and a message arrives.
  *
- * Three delivery paths, tried in order, so the same code works at
- * every level of configuration:
+ * Two delivery paths, webhook first:
  *
- *   1. TOKEN  — create the contact via the API, tagged `web-form`.
- *               A "Tag Added" workflow trigger then fires for FREE.
- *   2. WEBHOOK— POST to an inbound-webhook trigger. No token needed,
- *               but it is a premium trigger billed per execution.
- *   3. NEITHER— validate and report honestly. Page still works.
+ *   1. WEBHOOK — POST to an inbound-webhook trigger. Fires every single
+ *                time, with no state and no deduplication.
+ *   2. TOKEN   — create the contact via the API, tagged `web-form`.
+ *                Cheaper (no premium trigger) but UNRELIABLE as a
+ *                trigger: GoHighLevel does not emit a "tag added" event
+ *                when a contact is CREATED with tags already attached,
+ *                so a create-and-tag in one call fires nothing. It only
+ *                works when the contact already existed.
+ *   3. NEITHER — validate and report honestly. The page still works.
+ *
+ * Webhook wins because a demo that silently does nothing is far more
+ * expensive than a fraction of a cent per execution.
  *
  * Note what is NOT accepted from the body: no tenant id, no location
  * id, no webhook URL. Tenant identity is derived from the hostname
@@ -57,8 +63,34 @@ export async function POST(req: Request) {
   // than blaming a missing webhook. A misleading error costs more time
   // than no error at all.
   let apiFailure: string | null = null;
+  const hook = tenant.ghl.enquiryHook ?? process.env.GHL_DEFAULT_ENQUIRY_HOOK;
 
-  // ── Path 1: token ──────────────────────────────────────────────
+  // ── Path 1: inbound webhook — fires reliably ─────────────────────
+
+  if (hook) {
+    const res = await fireWorkflow(hook, {
+      firstName,
+      fullName: name,
+      email,
+      phone,
+      message,
+      source: 'demo-site',
+      tags: ['demo-lead', 'web-form'],
+      company: tenant.company,
+      city: tenant.city,
+      slug: tenant.slug
+    });
+    if (res.ok) {
+      return NextResponse.json({
+        ok: true, live: true, via: 'webhook',
+        detail: 'Sent to GoHighLevel — the workflow has fired.'
+      });
+    }
+    apiFailure = `webhook ${res.reason}`;
+  }
+
+  // ── Path 2: token — creates a real contact, but see the note above
+  //    about why this is not a dependable trigger ─────────────────
   if (hasToken() && tenant.ghl.locationId) {
     const res = await upsertContact(tenant, {
       firstName,
@@ -77,34 +109,20 @@ export async function POST(req: Request) {
         live: true,
         via: 'api',
         contactId: res.contactId,
-        detail: 'Contact created and tagged — the workflow has fired.'
+        detail:
+          'Contact created and tagged. Note: GoHighLevel does not fire a ' +
+          '"tag added" trigger for a contact created with tags, so set ' +
+          'GHL_DEFAULT_ENQUIRY_HOOK if the workflow needs to run.'
       });
     }
     apiFailure = res.reason;
     // fall through to the webhook rather than failing outright
   }
 
-  // ── Path 2: inbound webhook ────────────────────────────────────
-  const hook = tenant.ghl.enquiryHook ?? process.env.GHL_DEFAULT_ENQUIRY_HOOK;
-  const hookRes = await fireWorkflow(hook, {
-    firstName,
-    fullName: name,
-    email,
-    phone,
-    message,
-    source: 'demo-site',
-    tags: ['demo-lead', 'web-form'],
-    company: tenant.company,
-    city: tenant.city,
-    slug: tenant.slug
-  });
-
   // ── Path 3: nothing configured ─────────────────────────────────
   // A GHL failure must never look like a broken page. A prospect is watching.
   let detail: string;
-  if (hookRes.ok) {
-    detail = 'Sent to GoHighLevel — the workflow has fired.';
-  } else if (apiFailure) {
+  if (apiFailure) {
     detail = `Form works, but GoHighLevel refused the write — ${apiFailure}`;
   } else if (!hasToken()) {
     detail = 'Form works — GHL_TOKEN is not set on this deployment.';
@@ -114,10 +132,5 @@ export async function POST(req: Request) {
     detail = 'Form works — no workflow connected yet, so nothing was sent.';
   }
 
-  return NextResponse.json({
-    ok: true,
-    live: hookRes.ok,
-    via: hookRes.ok ? 'webhook' : 'none',
-    detail
-  });
+  return NextResponse.json({ ok: true, live: false, via: 'none', detail });
 }

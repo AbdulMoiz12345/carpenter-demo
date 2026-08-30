@@ -53,7 +53,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'That slot has just gone. Pick another.' }, { status: 409 });
   }
 
-  // ── Path 1: token — real contact, real appointment ─────────────
+  const hook = tenant.ghl.bookingHook ?? tenant.ghl.enquiryHook ?? process.env.GHL_DEFAULT_ENQUIRY_HOOK;
+
+  // ── Path 1: inbound webhook — fires reliably ───────────────────
+  // Preferred for the same reason as the enquiry route: GoHighLevel
+  // does not emit a "tag added" event for a contact created with tags,
+  // so the token path cannot be relied on to start a workflow.
+  if (hook) {
+    const res = await fireWorkflow(hook, {
+      firstName,
+      fullName: name,
+      email,
+      phone,
+      appointmentIso: slotIso,
+      appointmentLabel: label,
+      source: 'demo-site-booking',
+      tags: ['demo-lead', 'site-visit-requested'],
+      company: tenant.company,
+      calendarId: tenant.ghl.calendarId,
+      slug: tenant.slug
+    });
+    if (res.ok) {
+      return NextResponse.json({ ok: true, live: true, via: 'webhook', label });
+    }
+  }
+
+  // ── Path 2: token — creates a real contact and appointment ─────
   if (hasToken() && tenant.ghl.locationId) {
     const contact = await upsertContact(tenant, {
       firstName,
@@ -78,28 +103,5 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── Path 2: inbound webhook ────────────────────────────────────
-  const hookRes = await fireWorkflow(
-    tenant.ghl.bookingHook ?? tenant.ghl.enquiryHook ?? process.env.GHL_DEFAULT_ENQUIRY_HOOK,
-    {
-      firstName,
-      fullName: name,
-      email,
-      phone,
-      appointmentIso: slotIso,
-      appointmentLabel: label,
-      source: 'demo-site-booking',
-      tags: ['demo-lead', 'site-visit-requested'],
-      company: tenant.company,
-      calendarId: tenant.ghl.calendarId,
-      slug: tenant.slug
-    }
-  );
-
-  return NextResponse.json({
-    ok: true,
-    live: hookRes.ok,
-    via: hookRes.ok ? 'webhook' : 'none',
-    label
-  });
+  return NextResponse.json({ ok: true, live: false, via: 'none', label });
 }
