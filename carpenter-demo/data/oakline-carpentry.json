@@ -72,5 +72,9 @@
     "color_from": "theme-color",
     "logo_from": "generated (offline mode)",
     "content_from": "no-api-key"
-  }
+  },
+  "images": [],
+  "testimonials": [],
+  "credentials": [],
+  "email": ""
 }

@@ -16,19 +16,40 @@ export const dynamic = 'force-dynamic';
  * switched off the moment demos go out to real prospects — a public
  * "make me a demo" endpoint is not something to leave running.
  */
+/**
+ * Cosmetic fields are CLAMPED, never rejected.
+ *
+ * A demo being blocked because a headline came back 63 characters long
+ * is a terrible outcome — especially live on a call. Length is a layout
+ * concern, so trim it at a word boundary and carry on. Only genuinely
+ * unsafe values (a malformed hex colour going into a stylesheet) are
+ * still hard failures.
+ */
+const clamp = (max: number) =>
+  z.string().transform((v) => {
+    const t = v.trim();
+    if (t.length <= max) return t;
+    const cut = t.slice(0, max);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trim();
+  });
+
 const Body = z.object({
-  company: z.string().min(1).max(200),
-  short: z.string().max(24).optional(),
-  city: z.string().max(80).default(''),
-  phone: z.string().max(40).default(''),
+  company: clamp(200).refine((v) => v.length > 0, 'Business name is required'),
+  short: clamp(24).optional(),
+  city: clamp(80).default(''),
+  phone: clamp(40).default(''),
   email: z.string().email().max(160).optional().or(z.literal('')),
   primary: z.string().refine(isValidHex, 'hex colour like #7a4b24'),
-  tagline: z.string().max(400).default(''),
-  headline: z.tuple([z.string().max(60), z.string().max(60)]).optional(),
-  nearby: z.array(z.string().max(60)).max(6).default([]),
+  tagline: clamp(400).default(''),
+  headline: z.tuple([clamp(60), clamp(60)]).optional(),
+  nearby: z.array(clamp(60)).max(6).default([]),
   since: z.number().int().min(0).max(2100).default(0),
-  services: z.array(z.object({ name: z.string().max(80), tag: z.string().max(60).default('') })).max(8).default([]),
-  work: z.array(z.object({ title: z.string().max(120), where: z.string().max(80).default('') })).max(6).default([]),
+  services: z.array(z.object({ name: clamp(80), tag: clamp(60).default('') })).max(8).default([]),
+  work: z.array(z.object({ title: clamp(120), where: clamp(80).default('') })).max(6).default([]),
+  images: z.array(z.string().url()).max(8).default([]),
+  testimonials: z.array(z.object({ quote: clamp(240), author: clamp(60).default('') })).max(3).default([]),
+  credentials: z.array(clamp(40)).max(4).default([]),
   logo: z.union([
     z.object({ type: z.literal('wordmark') }),
     z.object({ type: z.literal('image'), url: z.string().url(), from: z.string().optional() })
@@ -90,6 +111,10 @@ export async function POST(req: Request) {
       { title: 'Kitchen cabinet install', where: city },
       { title: 'Stair railing and trim', where: city }
     ],
+    images: d.images,
+    testimonials: d.testimonials,
+    credentials: d.credentials,
+    email: '',
     // The operator's own email, so notifications from this demo land
     // somewhere they can put on screen during the call.
     ghl: d.email ? { ownerEmail: d.email } : {},

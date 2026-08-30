@@ -56,3 +56,9 @@ create table if not exists tenant_audit (
 );
 
 create index if not exists tenant_audit_slug_idx on tenant_audit (slug, at desc);
+
+-- Added by migration 001. Included here so a fresh database matches.
+alter table tenants add column if not exists images       jsonb not null default '[]'::jsonb;
+alter table tenants add column if not exists testimonials jsonb not null default '[]'::jsonb;
+alter table tenants add column if not exists credentials  jsonb not null default '[]'::jsonb;
+alter table tenants add column if not exists email        text  not null default '';

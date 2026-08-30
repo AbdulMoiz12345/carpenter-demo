@@ -166,3 +166,45 @@ button{font:inherit;cursor:pointer}
 body.has-dev{padding-bottom:78px}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ============================================================
+   PROOF BAND
+   Adaptive: photos when they exist, reviews when they don't.
+   Nothing renders a fixed grid of empty boxes any more — an
+   empty slot reads as broken, which is worse than sparse.
+   ============================================================ */
+.shots{display:grid;gap:1rem;grid-template-columns:1fr}
+@media(min-width:640px){.shots{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:920px){.shots{grid-template-columns:repeat(3,1fr)}}
+.shot{margin:0;background:var(--card);border:1px solid var(--rule);overflow:hidden}
+.shot img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:var(--rule-2)}
+.shot figcaption{padding:.8rem .95rem}
+.shot figcaption b{display:block;font-weight:600;font-size:.95rem}
+
+.shots-few{grid-template-columns:1fr}
+.shot-solo{width:100%;aspect-ratio:4/3;object-fit:cover;border:1px solid var(--rule);background:var(--rule-2)}
+
+.proof-split{display:grid;gap:1.6rem}
+@media(min-width:900px){.proof-split{grid-template-columns:1.1fr 1fr;gap:2.4rem;align-items:start}}
+
+.quotes{display:grid;gap:1rem;margin-top:.9rem}
+@media(min-width:760px){.quotes-wide{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}}
+.quote{
+  margin:0;padding:1.15rem 1.25rem;background:var(--card);
+  border:1px solid var(--rule);border-left:3px solid var(--brand);
+}
+.quote p{
+  margin:0;font-size:1.02rem;line-height:1.55;
+  /* Slightly larger than body so a real customer's words carry weight. */
+}
+.quote cite{display:block;margin-top:.7rem;font-style:normal}
+
+/* Trust facts, sat under the hero spec strip */
+.creds{
+  display:flex;flex-wrap:wrap;gap:.45rem;margin-top:1.4rem;
+}
+.creds span{
+  font-family:var(--fmono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-2);border:1px solid var(--rule);border-radius:2px;padding:.42rem .7rem;
+  background:var(--card);
+}

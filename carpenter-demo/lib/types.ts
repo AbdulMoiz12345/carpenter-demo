@@ -21,6 +21,11 @@ export interface WorkItem {
   where: string;
 }
 
+export interface Testimonial {
+  quote: string;
+  author: string;
+}
+
 export type Logo =
   | { type: 'wordmark' }
   | { type: 'image'; url: string; from: LogoSource };
@@ -70,6 +75,22 @@ export interface Tenant {
 
   services: Service[];
   work: WorkItem[];
+
+  /**
+   * Real project photos lifted from their own site. Hotlinked, not
+   * copied — this is their imagery shown back to them, which is the
+   * single strongest signal that the page was built for them.
+   * Empty is normal and handled: the proof band adapts.
+   */
+  images: string[];
+
+  /** Real review text from their site. Fills the space photos would. */
+  testimonials: Testimonial[];
+
+  /** "Licensed & insured", "Since 1994", "Free estimates". */
+  credentials: string[];
+
+  email: string;
 
   ghl: GhlBinding;
 }

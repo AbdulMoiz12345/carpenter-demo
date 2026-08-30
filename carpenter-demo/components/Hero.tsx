@@ -1,12 +1,17 @@
 import type { Tenant } from '@/lib/types';
 
 export default function Hero({ tenant }: { tenant: Tenant }) {
+  // Only show a cell when there is something in it. An empty
+  // "Google rating" reads as broken, exactly like an empty photo slot.
   const facts: [string, string | number][] = [
-    ['Working since', tenant.since],
-    ['Google rating', `${tenant.rating} ★`],
-    ['Reviews', tenant.reviews],
-    ['Covering', tenant.city]
-  ];
+    ...(tenant.since ? ([['Working since', tenant.since]] as [string, string | number][]) : []),
+    ...(tenant.rating ? ([['Google rating', `${tenant.rating} ★`]] as [string, string | number][]) : []),
+    ...(tenant.reviews ? ([['Reviews', tenant.reviews]] as [string, string | number][]) : []),
+    ...(tenant.city ? ([['Covering', tenant.city]] as [string, string | number][]) : []),
+    ...(tenant.services?.length
+      ? ([['Services', tenant.services.length]] as [string, string | number][])
+      : [])
+  ].slice(0, 4);
   return (
     <header className="hero wrap" id="top">
       <div className="hero-rule" />
@@ -19,6 +24,7 @@ export default function Hero({ tenant }: { tenant: Tenant }) {
         <a className="btn btn-primary" href="#book">Book a site visit</a>
         <a className="btn btn-ghost" href={`tel:${tenant.phone.replace(/\s/g, '')}`}>{tenant.phone}</a>
       </div>
+      {facts.length > 0 && (
       <div className="spec">
         {facts.map(([k, v]) => (
           <div key={k}>
@@ -27,6 +33,17 @@ export default function Hero({ tenant }: { tenant: Tenant }) {
           </div>
         ))}
       </div>
+      )}
+
+      {/* Trust facts lifted verbatim from their own site. Renders only
+          when extraction actually found some — no invented badges. */}
+      {tenant.credentials?.length > 0 && (
+        <div className="creds">
+          {tenant.credentials.map((c) => (
+            <span key={c}>{c}</span>
+          ))}
+        </div>
+      )}
     </header>
   );
 }

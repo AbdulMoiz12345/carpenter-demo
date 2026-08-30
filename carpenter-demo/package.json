@@ -11,7 +11,6 @@
     "leakcheck": "grep -rIlE 'GHL_TOKEN|ADMIN_TOKEN|ANTHROPIC_API_KEY|pit-|sk-ant|postgres://|leadconnectorhq' .next/static/ && echo LEAK && exit 1 || echo clean"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.122.0",
     "@vercel/blob": "^2.8.0",
     "cheerio": "^1.2.0",
     "next": "14.2.5",

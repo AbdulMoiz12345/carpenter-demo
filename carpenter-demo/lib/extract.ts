@@ -80,6 +80,10 @@ export interface Draft {
   colors: { primary: string };
   services: { name: string; tag: string }[];
   work: { title: string; where: string }[];
+  images: string[];
+  testimonials: { quote: string; author: string }[];
+  credentials: string[];
+  email: string;
   notes: string[];
 }
 
@@ -148,6 +152,99 @@ function logoCandidates($: cheerio.CheerioAPI, base: string): { url: string; fro
   return out.filter((c) => c.url && !seen.has(c.url) && seen.add(c.url)).slice(0, 6);
 }
 
+/**
+ * PROJECT PHOTOS
+ *
+ * The weakest thing a demo can show is an empty photo slot. A carpenter's
+ * own site is usually full of project shots, so use theirs — their work,
+ * shown back to them, is the strongest possible signal the page was made
+ * for them.
+ *
+ * These are hotlinked rather than copied. Fine for a demo the owner
+ * themselves is looking at; if demos ever get shown to third parties,
+ * mirror them to Blob instead.
+ */
+const IMG_SKIP = /logo|icon|favicon|sprite|badge|avatar|placeholder|spacer|pixel|banner-ad|1x1|blank/i;
+const IMG_GOOD = /gallery|project|portfolio|work|photo|image|upload|wp-content|media|slide/i;
+
+function harvestImages($: cheerio.CheerioAPI, base: string, logoUrl: string | null): string[] {
+  const abs = (u: string) => {
+    try {
+      return new URL(u, base).href;
+    } catch {
+      return '';
+    }
+  };
+
+  const scored: { url: string; score: number }[] = [];
+  const seen = new Set<string>();
+
+  $('img').each((_, el) => {
+    const $el = $(el);
+    // srcset gives the largest variant; take the last entry.
+    const srcset = $el.attr('srcset') ?? '';
+    const fromSet = srcset ? srcset.split(',').pop()?.trim().split(/\s+/)[0] : '';
+    const raw = fromSet || $el.attr('src') || $el.attr('data-src') || '';
+    if (!raw || raw.startsWith('data:')) return;
+
+    const url = abs(raw);
+    if (!url || seen.has(url) || url === logoUrl) return;
+    if (/\.svg($|\?)/i.test(url)) return;         // icons, not photos
+    if (IMG_SKIP.test(url)) return;
+
+    const alt = $el.attr('alt') ?? '';
+    const w = Number($el.attr('width') ?? 0);
+    const h = Number($el.attr('height') ?? 0);
+    if ((w && w < 200) || (h && h < 150)) return;   // thumbnails and icons
+
+    let score = 0;
+    if (IMG_GOOD.test(url)) score += 3;
+    if (alt.length > 4 && !IMG_SKIP.test(alt)) score += 2;
+    if (w >= 600 || h >= 400) score += 2;
+    // Sections that exist to show work.
+    if ($el.closest('[class*="gallery"], [class*="portfolio"], [class*="project"], [id*="gallery"]').length) score += 4;
+
+    seen.add(url);
+    scored.push({ url, score });
+  });
+
+  // Also pick up CSS background images, which is how many themes do heroes.
+  $('[style*="background-image"]').each((_, el) => {
+    const m = ($(el).attr('style') ?? '').match(/url\(['"]?([^'")]+)/);
+    if (!m) return;
+    const url = abs(m[1]);
+    if (!url || seen.has(url) || IMG_SKIP.test(url) || /\.svg($|\?)/i.test(url)) return;
+    seen.add(url);
+    scored.push({ url, score: 2 });
+  });
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12)
+    .map((x) => x.url);
+}
+
+/** Confirm the URLs actually serve images before putting them on a page. */
+async function verifyImages(urls: string[], want = 6): Promise<string[]> {
+  const out: string[] = [];
+  const checks = urls.slice(0, 10).map(async (url) => {
+    try {
+      const r = await fetch(url, { method: 'HEAD', headers: UA, signal: AbortSignal.timeout(4000) });
+      const type = r.headers.get('content-type') ?? '';
+      const len = Number(r.headers.get('content-length') ?? 0);
+      // Under ~8KB is almost always an icon or a tracking pixel.
+      if (r.ok && type.startsWith('image/') && (!len || len > 8000)) return url;
+    } catch {
+      /* unreachable image, skip it */
+    }
+    return null;
+  });
+  for (const r of await Promise.all(checks)) {
+    if (r && out.length < want) out.push(r);
+  }
+  return out;
+}
+
 async function pickLogo(cands: { url: string; from: string }[]): Promise<Tenant['logo']> {
   for (const c of cands) {
     try {
@@ -174,42 +271,93 @@ Rules:
 - Output ONE JSON object, nothing else. No prose, no markdown fences.
 - Never invent facts. Use null or [] when something is not stated.
 - services: things the business says it does, in their words, lightly tidied, Title Case, 2-6 items. tag = price or basis if stated, else "".
-- headline: exactly two short lines that read as one sentence. US English. Name the trade and the city. No trailing punctuation on line one.
-- tagline: one or two plain sentences a tradesperson would recognise as their own. Never "premier", "leading" or "quality".
+- headline: exactly two lines that read as one sentence. US English. Name the trade and the city. HARD LIMIT 34 characters per line — count them. No trailing punctuation on line one.
+- tagline: one or two plain sentences a tradesperson would recognise as their own, under 200 characters total. Never "premier", "leading" or "quality".
 - nearby: up to 4 neighbourhoods or nearby towns they mention serving.
+- testimonials: up to 3 real customer reviews quoted from the page. quote must be VERBATIM from the text, trimmed to under 220 characters, ending at a sentence boundary. author is the reviewer's name if given, else "". Return [] if the page has no reviews — never invent one.
+- credentials: up to 4 short trust facts stated on the page, 3-5 words each. Examples: "Licensed & insured", "Family owned since 1994", "Free estimates", "BBB accredited". Return [] if none are stated.
+- email: a contact email address if one appears, else "".
+- work: real project names from the page if any are described, else [].
 - in_niche: true only for genuine carpentry, joinery, cabinetry, millwork or finish carpentry. A general contractor listing carpentry among twenty trades is false.`;
 
-const SHAPE = `{"company":"","short":"","headline":["",""],"tagline":"","city":"","nearby":[],"phone":"","since":null,"services":[{"name":"","tag":""}],"work":[{"title":"","where":""}],"in_niche":true,"reject_reason":null}`;
+const SHAPE = `{"company":"","short":"","headline":["",""],"tagline":"","city":"","nearby":[],"phone":"","email":"","since":null,"services":[{"name":"","tag":""}],"work":[{"title":"","where":""}],"testimonials":[{"quote":"","author":""}],"credentials":[""],"in_niche":true,"reject_reason":null}`;
 
-async function analyse(text: string, hintName: string) {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return null;
+type AnalyseResult =
+  | { ok: true; facts: Record<string, unknown> }
+  | { ok: false; why: string };
+
+/**
+ * Called via plain fetch rather than the SDK.
+ *
+ * A dynamic `await import()` of the SDK inside a function is fragile in
+ * a serverless bundle — if it fails to resolve at runtime the call
+ * throws and, before this rewrite, was indistinguishable from a missing
+ * key. Direct fetch has no bundling surface and the failure modes are
+ * visible.
+ */
+async function analyse(text: string, hintName: string): Promise<AnalyseResult> {
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!key) return { ok: false, why: 'ANTHROPIC_API_KEY is not set on this deployment.' };
+
+  const model = process.env.EXTRACTOR_MODEL ?? 'claude-sonnet-4-6';
+
+  let res: Response;
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const client = new Anthropic({ apiKey: key });
-    const msg = await client.messages.create({
-      model: process.env.EXTRACTOR_MODEL ?? 'claude-sonnet-4-6',
-      max_tokens: 1400,
-      system: SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Business name hint: ${hintName || 'unknown'}\n\n` +
-            `Return JSON matching exactly this shape:\n${SHAPE}\n\n` +
-            `Website text:\n---\n${text.slice(0, 14000)}\n---`
-        }
-      ]
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1400,
+        system: SYSTEM,
+        messages: [
+          {
+            role: 'user',
+            content:
+              `Business name hint: ${hintName || 'unknown'}\n\n` +
+              `Return JSON matching exactly this shape:\n${SHAPE}\n\n` +
+              `Website text:\n---\n${text.slice(0, 14000)}\n---`
+          }
+        ]
+      }),
+      signal: AbortSignal.timeout(45_000)
     });
-    const raw = msg.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
-    return JSON.parse(
-      raw
-        .replace(/^```(?:json)?/, '')
-        .replace(/```$/, '')
-        .trim()
-    );
-  } catch {
-    return null;
+  } catch (e) {
+    const name = (e as Error).name;
+    return {
+      ok: false,
+      why: name === 'TimeoutError'
+        ? 'Claude did not respond within 45s.'
+        : `Could not reach Claude (${name}).`
+    };
+  }
+
+  if (!res.ok) {
+    // Surface the real reason — auth, credit and model errors all look
+    // identical from the outside otherwise.
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: { type?: string; message?: string } };
+      if (body.error?.message) detail = `${body.error.type ?? res.status}: ${body.error.message}`;
+    } catch { /* keep the status code */ }
+    console.error('[extract] anthropic call failed', detail);
+    return { ok: false, why: `Claude rejected the request — ${detail}` };
+  }
+
+  try {
+    const json = (await res.json()) as { content?: { type: string; text?: string }[] };
+    const raw = (json.content ?? [])
+      .map((b) => (b.type === 'text' ? b.text ?? '' : ''))
+      .join('');
+    const cleaned = raw.replace(/^```(?:json)?/, '').replace(/```$/, '').trim();
+    return { ok: true, facts: JSON.parse(cleaned) };
+  } catch (e) {
+    console.error('[extract] could not parse Claude output', (e as Error).message);
+    return { ok: false, why: 'Claude replied but the output was not valid JSON.' };
   }
 }
 
@@ -252,6 +400,10 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
     notes.push('No usable brand colour found — using a neutral default.');
   }
 
+  // Keep an unstripped copy: the text pass below removes <img>, and
+  // photos are harvested after it.
+  const $img = cheerio.load(html);
+
   // ── text ──
   $('script, style, noscript, svg').remove();
   const text = $('body')
@@ -272,14 +424,26 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
-  const facts = await analyse(text, guess);
-  if (!facts) notes.push('ANTHROPIC_API_KEY not set, so the copy is generic.');
+  const analysis = await analyse(text, guess);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const facts: any = analysis.ok ? analysis.facts : null;
+  if (!analysis.ok) notes.push(`Copy is generic — ${analysis.why}`);
   if (facts?.in_niche === false) {
     notes.push(`Flagged as outside the niche: ${facts.reject_reason ?? 'no carpentry signals'}`);
   }
 
   const logo = await pickLogo(logoCandidates($, url));
   if (logo.type === 'wordmark') notes.push('No logo found — a wordmark will be generated.');
+
+  // Their own project photos. Run after the logo so it can be excluded.
+  const images = await verifyImages(
+    harvestImages($img, url, logo.type === 'image' ? logo.url : null)
+  );
+  if (images.length) {
+    notes.push(`Found ${images.length} project photo${images.length === 1 ? '' : 's'}.`);
+  } else {
+    notes.push('No usable project photos — the page will lead with reviews instead.');
+  }
 
   const city: string = facts?.city ?? '';
   const services = (facts?.services ?? [])
@@ -314,6 +478,18 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
     work: (facts?.work ?? [])
       .slice(0, 3)
       .map((w: { title: string; where?: string }) => ({ title: w.title, where: w.where || city })),
+    images,
+    testimonials: (facts?.testimonials ?? [])
+      .filter((t: { quote?: string }) => t?.quote && t.quote.length > 20)
+      .slice(0, 3)
+      .map((t: { quote: string; author?: string }) => ({
+        quote: t.quote.slice(0, 240),
+        author: (t.author ?? '').slice(0, 60)
+      })),
+    credentials: (facts?.credentials ?? [])
+      .filter((c: string) => c && c.length < 40)
+      .slice(0, 4),
+    email: facts?.email ?? '',
     notes: [
       ...notes,
       `Colour via ${colorFrom}.`,

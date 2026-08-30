@@ -45,6 +45,13 @@ const TenantIn = z.object({
   services: z.array(z.object({ name: z.string().max(80), tag: z.string().max(60).default('') })).max(8).default([]),
   work: z.array(z.object({ title: z.string().max(120), where: z.string().max(80).default('') })).max(6).default([]),
 
+  images: z.array(z.string().url()).max(8).default([]),
+  testimonials: z.array(z.object({
+    quote: z.string().max(240), author: z.string().max(60).default('')
+  })).max(3).default([]),
+  credentials: z.array(z.string().max(40)).max(4).default([]),
+  email: z.string().max(160).default(''),
+
   ghl: z.object({
     locationId: z.string().max(80).optional(),
     enquiryHook: z.string().url().optional(),

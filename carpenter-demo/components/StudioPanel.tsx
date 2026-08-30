@@ -10,6 +10,9 @@ interface Draft {
   city: string; nearby: string[]; phone: string; since: number;
   logo: Logo; colors: { primary: string };
   services: Service[]; work: { title: string; where: string }[];
+  images: string[];
+  testimonials: { quote: string; author: string }[];
+  credentials: string[];
   notes: string[];
 }
 
@@ -23,7 +26,7 @@ const BLANK: Draft = {
     { name: 'Trim and finish carpentry', tag: '' },
     { name: 'Interior doors', tag: '' }
   ],
-  work: [], notes: []
+  work: [], images: [], testimonials: [], credentials: [], notes: []
 };
 
 export default function StudioPanel({ enabled }: { enabled: boolean }) {
@@ -65,7 +68,8 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
           email: email || undefined, primary: d.colors.primary, tagline: d.tagline,
           headline: d.headline, nearby: d.nearby, since: Number(d.since) || 0,
           services: d.services.filter((s) => s.name.trim()),
-          work: d.work.filter((w) => w.title.trim()), logo: d.logo
+          work: d.work.filter((w) => w.title.trim()), logo: d.logo,
+          images: d.images, testimonials: d.testimonials, credentials: d.credentials
         })
       });
       const j = await r.json();
@@ -176,6 +180,16 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
             <label className="mono" htmlFor="s-since">Working since</label>
             <input id="s-since" value={d.since || ''} inputMode="numeric"
                    onChange={(e) => set('since', Number(e.target.value) || 0)} placeholder="2011" />
+          </div>
+          <div className="field">
+            <label className="mono" htmlFor="s-h1">Headline, line 1</label>
+            <input id="s-h1" value={d.headline[0]} maxLength={60}
+                   onChange={(e) => set('headline', [e.target.value, d.headline[1]])} />
+          </div>
+          <div className="field">
+            <label className="mono" htmlFor="s-h2">Headline, line 2</label>
+            <input id="s-h2" value={d.headline[1]} maxLength={60}
+                   onChange={(e) => set('headline', [d.headline[0], e.target.value])} />
           </div>
           <div className="field" style={{ gridColumn: '1 / -1' }}>
             <label className="mono" htmlFor="s-tag">Tagline</label>
