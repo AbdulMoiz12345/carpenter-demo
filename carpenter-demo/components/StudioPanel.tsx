@@ -201,10 +201,13 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
               and without it the demo's automations have nowhere to land. */}
           <div className="field" style={{ gridColumn: '1 / -1' }}>
             <label className="mono" htmlFor="s-email">
-              Where notifications go — your email *
+              Your email — recorded against this demo
             </label>
             <input id="s-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                    placeholder="you@caito360.ai" />
+            <span className="mono" style={{ textTransform: 'none', letterSpacing: 0 }}>
+              Notifications are addressed inside the GoHighLevel workflow, not here.
+            </span>
           </div>
         </div>
 

@@ -117,8 +117,9 @@ export async function listTenants(limit = 50): Promise<Tenant[]> {
  * Create or replace a tenant. Idempotent by slug: running the extractor
  * twice over the same company yields exactly one tenant, not two.
  *
- * `ghl` is preserved on conflict — re-extracting a prospect must not
- * wipe the sub-account binding someone attached afterwards.
+ * `ghl` is MERGED rather than replaced, so re-extracting a prospect —
+ * or rebuilding their demo in the studio — never wipes a sub-account
+ * binding that was attached later.
  */
 export async function upsertTenant(t: Tenant & { meta?: unknown }): Promise<'created' | 'updated'> {
   if (!usingDatabase()) throw new Error('DATABASE_URL is not set');
@@ -142,7 +143,11 @@ export async function upsertTenant(t: Tenant & { meta?: unknown }): Promise<'cre
        reviews = excluded.reviews, logo = excluded.logo,
        colors = excluded.colors, services = excluded.services,
        work = excluded.work,
-       ghl = coalesce(nullif(excluded.ghl, '{}'::jsonb), tenants.ghl),
+       -- MERGE, never replace. Re-extracting or rebuilding a demo must
+       -- not wipe a sub-account binding someone attached afterwards.
+       -- Right-hand side wins per key, so an incoming {} changes nothing
+       -- and an incoming partial only sets the keys it carries.
+       ghl = tenants.ghl || excluded.ghl,
        meta = excluded.meta, images = excluded.images,
        testimonials = excluded.testimonials, credentials = excluded.credentials,
        email = excluded.email, updated_at = now()

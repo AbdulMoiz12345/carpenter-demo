@@ -115,10 +115,17 @@ export async function POST(req: Request) {
     testimonials: d.testimonials,
     credentials: d.credentials,
     email: '',
-    // The operator's own email, so notifications from this demo land
-    // somewhere they can put on screen during the call.
-    ghl: d.email ? { ownerEmail: d.email } : {},
-    meta: { built_by: 'studio', at: new Date().toISOString() }
+    // Never written here. Bindings are attached separately via
+    // /api/admin/bind, and this route must not touch them — writing a
+    // partial object here is what used to clear locationId on rebuild.
+    ghl: {},
+    meta: {
+      built_by: 'studio',
+      at: new Date().toISOString(),
+      // Kept as provenance only. Nothing reads it: notifications are
+      // addressed inside the GoHighLevel workflow, not from here.
+      operator_email: d.email || undefined
+    }
   } as unknown as Tenant & { meta: unknown };
 
   try {
