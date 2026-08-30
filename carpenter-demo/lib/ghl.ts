@@ -176,10 +176,19 @@ export async function upsertContact(
     });
 
     if (!res.ok) {
-      // Never log the response body wholesale — it can echo the request,
-      // and request headers carry the token.
-      console.error('[ghl] upsertContact', res.status);
-      return { ok: false, reason: `ghl-${res.status}` };
+      // Read the message but never the whole body — a response can echo
+      // the request, and request headers carry the token.
+      let why = `HTTP ${res.status}`;
+      try {
+        const body = (await res.json()) as { message?: string | string[]; error?: string };
+        const msg = Array.isArray(body.message) ? body.message.join('; ') : body.message;
+        if (msg) why = `${res.status}: ${String(msg).slice(0, 200)}`;
+        else if (body.error) why = `${res.status}: ${String(body.error).slice(0, 200)}`;
+      } catch {
+        /* keep the status code */
+      }
+      console.error('[ghl] upsertContact failed —', why);
+      return { ok: false, reason: why };
     }
 
     const json = (await res.json()) as { contact?: { id?: string } };

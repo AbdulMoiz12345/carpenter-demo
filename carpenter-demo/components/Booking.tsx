@@ -67,8 +67,9 @@ export default function Booking({ tenant, initialSlots }: { tenant: Tenant; init
     if (!data) return;
     setMsg({
       text: data.live
-        ? `Sent. ${name.split(' ')[0]} gets a text from ${tenant.short} in about ten seconds.`
-        : `Form works — no workflow connected yet, so no text was sent.`
+        ? `Sent. ${name.split(' ')[0]} gets a message from ${tenant.short} in about ten seconds.`
+        : (data.detail ?? 'Form works, but nothing was sent.'),
+      bad: !data.live
     });
   }
 

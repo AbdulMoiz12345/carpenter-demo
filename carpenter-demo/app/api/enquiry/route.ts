@@ -53,6 +53,11 @@ export async function POST(req: Request) {
   const { name, phone, email, message } = parsed.data;
   const [firstName, ...rest] = name.split(' ');
 
+  // Track why the token path failed, so the response can say so rather
+  // than blaming a missing webhook. A misleading error costs more time
+  // than no error at all.
+  let apiFailure: string | null = null;
+
   // ── Path 1: token ──────────────────────────────────────────────
   if (hasToken() && tenant.ghl.locationId) {
     const res = await upsertContact(tenant, {
@@ -75,6 +80,7 @@ export async function POST(req: Request) {
         detail: 'Contact created and tagged — the workflow has fired.'
       });
     }
+    apiFailure = res.reason;
     // fall through to the webhook rather than failing outright
   }
 
@@ -95,12 +101,23 @@ export async function POST(req: Request) {
 
   // ── Path 3: nothing configured ─────────────────────────────────
   // A GHL failure must never look like a broken page. A prospect is watching.
+  let detail: string;
+  if (hookRes.ok) {
+    detail = 'Sent to GoHighLevel — the workflow has fired.';
+  } else if (apiFailure) {
+    detail = `Form works, but GoHighLevel refused the write — ${apiFailure}`;
+  } else if (!hasToken()) {
+    detail = 'Form works — GHL_TOKEN is not set on this deployment.';
+  } else if (!tenant.ghl.locationId) {
+    detail = 'Form works — this demo has no GHL sub-account bound yet.';
+  } else {
+    detail = 'Form works — no workflow connected yet, so nothing was sent.';
+  }
+
   return NextResponse.json({
     ok: true,
     live: hookRes.ok,
     via: hookRes.ok ? 'webhook' : 'none',
-    detail: hookRes.ok
-      ? 'Sent to GoHighLevel — the workflow has fired.'
-      : 'No workflow connected yet, so nothing was sent. The form itself works.'
+    detail
   });
 }
