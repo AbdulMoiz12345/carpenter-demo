@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { resolveTenantForApi } from '@/lib/tenants';
 import {
+  locationFor,
   upsertContact,
   createAppointment,
   fireWorkflow,
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'Pick a slot and add your details.' }, { status: 400 });
   }
+  let hookFailure: string | null = null;
   const { name, phone, email, slotIso } = parsed.data;
   const [firstName, ...rest] = name.split(' ');
   const when = new Date(slotIso);
@@ -53,7 +55,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'That slot has just gone. Pick another.' }, { status: 409 });
   }
 
-  const hook = tenant.ghl.bookingHook ?? tenant.ghl.enquiryHook ?? process.env.GHL_DEFAULT_ENQUIRY_HOOK;
+  // A dedicated booking workflow can word its emails around a requested
+  // slot ("we'll confirm within the hour"), which the enquiry workflow
+  // cannot. Falls back so the button always does something.
+  const hook =
+    tenant.ghl.bookingHook ??
+    process.env.GHL_BOOKING_HOOK ??
+    tenant.ghl.enquiryHook ??
+    process.env.GHL_DEFAULT_ENQUIRY_HOOK;
 
   // ── Path 1: inbound webhook — fires reliably ───────────────────
   // Preferred for the same reason as the enquiry route: GoHighLevel
@@ -69,17 +78,25 @@ export async function POST(req: Request) {
       appointmentLabel: label,
       source: 'demo-site-booking',
       tags: ['demo-lead', 'site-visit-requested'],
+      status: 'requested',
       company: tenant.company,
       calendarId: tenant.ghl.calendarId,
       slug: tenant.slug
     });
     if (res.ok) {
-      return NextResponse.json({ ok: true, live: true, via: 'webhook', label });
+      return NextResponse.json({
+        ok: true,
+        live: true,
+        via: 'webhook',
+        hook: process.env.GHL_BOOKING_HOOK ? 'booking' : 'enquiry-fallback',
+        label
+      });
     }
+    hookFailure = res.reason;
   }
 
   // ── Path 2: token — creates a real contact and appointment ─────
-  if (hasToken() && tenant.ghl.locationId) {
+  if (hasToken() && locationFor(tenant)) {
     const contact = await upsertContact(tenant, {
       firstName,
       lastName: rest.join(' ') || undefined,
@@ -103,5 +120,13 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, live: false, via: 'none', label });
+  return NextResponse.json({
+    ok: true,
+    live: false,
+    via: 'none',
+    label,
+    detail: hookFailure
+      ? `Slot held, but the booking workflow did not fire — ${hookFailure}`
+      : 'Slot held — no booking workflow is configured, so nothing was sent.'
+  });
 }

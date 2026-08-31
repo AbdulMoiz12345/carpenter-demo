@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import type { Tenant } from '@/lib/types';
+import type { Submission } from './OwnerView';
 
-type Slot = { day: string; time: string; iso: string };
+type Slot = { day: string; date: string; time: string; iso: string };
 type Msg = { text: string; bad?: boolean } | null;
 
 /**
@@ -13,7 +14,15 @@ type Msg = { text: string; bad?: boolean } | null;
  * The browser has no token, no location id and no webhook URL, so
  * there is nothing here for a prospect to find in devtools.
  */
-export default function Booking({ tenant, initialSlots }: { tenant: Tenant; initialSlots: Slot[] }) {
+export default function Booking({
+  tenant,
+  initialSlots,
+  onSubmitted
+}: {
+  tenant: Tenant;
+  initialSlots: Slot[];
+  onSubmitted?: (s: Submission) => void;
+}) {
   /**
    * On a real demo subdomain the server knows the tenant from the
    * hostname and this is ignored. It only matters for /d/<slug>, where
@@ -65,11 +74,25 @@ export default function Booking({ tenant, initialSlots }: { tenant: Tenant; init
     }
     const data = await post(`/api/enquiry${q}`, { name, phone, email: email || undefined, message, website }, 'enquiry');
     if (!data) return;
+    if (!data.live) {
+      return setMsg({ text: data.detail ?? 'Form works, but nothing was sent.', bad: true });
+    }
+    // `via` matters: the webhook path fires a workflow reliably, the
+    // token path creates a contact but may not trigger anything, so a
+    // "sent" that hides which ran is worse than no message.
     setMsg({
-      text: data.live
-        ? `Sent. ${name.split(' ')[0]} gets a message from ${tenant.short} in about ten seconds.`
-        : (data.detail ?? 'Form works, but nothing was sent.'),
-      bad: !data.live
+      text:
+        data.via === 'webhook'
+          ? `Sent. ${name.split(' ')[0]} gets a message from ${tenant.short} in about ten seconds.`
+          : `Contact created in GoHighLevel, but via the API rather than the webhook — ` +
+            `a workflow may not have fired. Set GHL_DEFAULT_ENQUIRY_HOOK.`,
+      bad: data.via !== 'webhook'
+    });
+
+    onSubmitted?.({
+      name, email, phone, message,
+      at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      via: data.via
     });
   }
 
@@ -83,8 +106,16 @@ export default function Booking({ tenant, initialSlots }: { tenant: Tenant; init
     if (!data) return;
     setMsg({
       text: data.live
-        ? `Booked for ${data.label}. Confirmation text sent, reminder queued for the day before.`
-        : `Slot held for ${slot.day} ${slot.time} — connect a workflow to send the confirmation.`
+        ? `Booked for ${data.label} — confirmation sent.`
+        : `Slot held for ${slot.day} ${slot.time} — no workflow connected, so no confirmation was sent.`,
+      bad: !data.live
+    });
+
+    onSubmitted?.({
+      name, email, phone, message,
+      slotLabel: data.label ?? `${slot.day} ${slot.date} at ${slot.time}`,
+      at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      via: data.via
     });
   }
 
@@ -107,6 +138,7 @@ export default function Booking({ tenant, initialSlots }: { tenant: Tenant; init
               >
                 <em>{s.day}</em>
                 <b>{s.time}</b>
+                <u>{s.date}</u>
               </button>
             ))}
           </div>

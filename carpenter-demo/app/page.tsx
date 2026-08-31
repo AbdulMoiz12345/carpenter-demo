@@ -8,9 +8,7 @@ import Nav from '@/components/Nav';
 import Hero from '@/components/Hero';
 import Services from '@/components/Services';
 import Proof from '@/components/Proof';
-import Booking from '@/components/Booking';
-import Seam from '@/components/Seam';
-import Panels from '@/components/crm/Panels';
+import DemoBody from '@/components/DemoBody';
 import DevSwitcher from '@/components/DevSwitcher';
 
 // Rendered per request. Tenant config is read at request time, so
@@ -38,10 +36,7 @@ export default async function Page({ searchParams }: { searchParams: { t?: strin
       <Hero tenant={tenant} />
       <Services tenant={tenant} />
       <Proof tenant={tenant} />
-      <Booking tenant={tenant} initialSlots={slots} />
-
-      <Seam tenant={tenant} />
-      <Panels tenant={tenant} seed={seed} />
+      <DemoBody tenant={tenant} seed={seed} slots={slots} />
 
       <footer className="wrap foot">
         <span className="name">{tenant.company}</span>

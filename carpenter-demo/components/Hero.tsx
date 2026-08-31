@@ -1,6 +1,7 @@
 import type { Tenant } from '@/lib/types';
 
 export default function Hero({ tenant }: { tenant: Tenant }) {
+  const lead = tenant.images?.[0];
   // Only show a cell when there is something in it. An empty
   // "Google rating" reads as broken, exactly like an empty photo slot.
   const facts: [string, string | number][] = [
@@ -14,6 +15,8 @@ export default function Hero({ tenant }: { tenant: Tenant }) {
   ].slice(0, 4);
   return (
     <header className="hero wrap" id="top">
+      <div className={lead ? 'hero-split' : undefined}>
+      <div>
       <div className="hero-rule" />
       <h1 className="disp">
         {tenant.headline[0]}
@@ -44,6 +47,17 @@ export default function Hero({ tenant }: { tenant: Tenant }) {
           ))}
         </div>
       )}
+      </div>
+
+      {/* Loaded eagerly: it is above the fold, and a hero that pops in
+          late is the kind of small wrongness that reads as templated. */}
+      {lead && (
+        <div className="hero-photo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lead} alt={`Work by ${tenant.company}`} />
+        </div>
+      )}
+      </div>
     </header>
   );
 }

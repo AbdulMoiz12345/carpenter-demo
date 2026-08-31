@@ -208,3 +208,109 @@ body.has-dev{padding-bottom:78px}
   color:var(--ink-2);border:1px solid var(--rule);border-radius:2px;padding:.42rem .7rem;
   background:var(--card);
 }
+
+/* ============================================================
+   HERO PHOTO
+   Their own work, beside the headline. The single biggest
+   visual upgrade available, and extraction already found it.
+   ============================================================ */
+.hero-split{display:grid;gap:2rem;align-items:center}
+@media(min-width:940px){.hero-split{grid-template-columns:1.05fr .95fr;gap:3rem}}
+.hero-photo{position:relative}
+.hero-photo img{
+  width:100%;aspect-ratio:4/3;object-fit:cover;
+  border:1px solid var(--rule);background:var(--rule-2);
+}
+/* A hairline of brand colour ties the photo to the palette without
+   tinting the photograph itself. */
+.hero-photo::after{
+  content:"";position:absolute;left:0;right:0;bottom:-1px;height:4px;background:var(--brand);
+}
+@media(max-width:939px){.hero-photo{margin-top:1.5rem}}
+
+/* ============================================================
+   SLOTS — now carry a date, so a slot is never ambiguous
+   ============================================================ */
+.slot u{
+  display:block;text-decoration:none;margin-top:.2rem;
+  font-family:var(--fmono);font-size:.52rem;letter-spacing:.08em;color:var(--stone);
+}
+.slot[aria-pressed="true"] u{color:#ffffffa8}
+.slot{transition:border-color .15s ease, transform .15s ease}
+.slot:hover{border-color:var(--brand-ink)}
+.slot[aria-pressed="true"]{transform:translateY(-1px)}
+
+/* ============================================================
+   CUSTOMER / OWNER SWITCH
+   The demo asks the prospect to be two people. This is the
+   only place that says so.
+   ============================================================ */
+.switch{
+  display:inline-flex;gap:2px;padding:3px;margin-bottom:1.2rem;
+  background:#ffffff10;border:1px solid #ffffff1f;border-radius:3px;
+}
+.switch button{
+  position:relative;background:transparent;border:0;color:#ffffff9a;border-radius:2px;
+  font-family:var(--fmono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+  padding:.6rem .9rem;
+}
+.switch button[aria-selected="true"]{background:var(--brand);color:#fff}
+.switch .dot{
+  display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:#fff;margin-left:.45rem;vertical-align:1px;
+}
+
+/* ============================================================
+   OWNER VIEW — two inboxes, side by side
+   ============================================================ */
+.owner-head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}
+.owner-live{color:var(--brand)!important}
+.owner-grid{display:grid;gap:1rem;margin-top:1rem}
+@media(min-width:900px){.owner-grid{grid-template-columns:1fr 1fr;gap:1.4rem}}
+
+.mail{background:#171A20;border:1px solid #ffffff1f;display:flex;flex-direction:column}
+.mail>header{padding:.9rem 1.1rem;border-bottom:1px solid #ffffff14}
+.mail>header b{display:block;margin-top:.2rem;font-weight:600;font-size:.95rem}
+.mail-body{padding:1.1rem;flex:1;font-size:.94rem;line-height:1.6;color:#ffffffd0}
+.mail-body p{margin:0 0 .8rem}
+.mail-subject{
+  font-family:var(--fdisp);font-weight:600;font-size:1.05rem;letter-spacing:-.01em;
+  color:#fff;margin-bottom:.9rem;padding-bottom:.7rem;border-bottom:1px solid #ffffff14;
+}
+.mail-sig{color:#ffffff8c;font-size:.88rem}
+.mail>footer{padding:.7rem 1.1rem;border-top:1px solid #ffffff14}
+.mail-internal{border-left:3px solid var(--brand)}
+
+.kv{display:grid;grid-template-columns:auto 1fr;gap:.45rem 1rem;margin:0}
+.kv dt{align-self:baseline}
+.kv dd{margin:0;color:#fff;font-size:.93rem}
+
+.owner-note{
+  margin:1.4rem 0 0;max-width:56ch;color:#ffffffa8;font-size:.95rem;
+}
+.owner-empty{border:1px dashed #ffffff2b;padding:clamp(1.4rem,4vw,2.4rem);text-align:center}
+.owner-empty p{margin:.7rem auto 0;max-width:44ch;color:#ffffffa8}
+
+/* A submission that just landed, marked apart from seeded history */
+.stage-new{
+  animation:landed .5s ease-out;
+}
+@keyframes landed{
+  from{opacity:0;transform:translateY(-6px)}
+  to{opacity:1;transform:none}
+}
+
+/* ============================================================
+   THE ACCEPT STEP
+   A real owner clicks this in their notification email. On a
+   demo it sits on the page, so one person can play both parts
+   without juggling two inboxes.
+   ============================================================ */
+.accept{
+  margin-top:1.2rem;padding:1.2rem 1.35rem;
+  background:#ffffff0a;border:1px solid #ffffff1f;border-left:3px solid var(--brand);
+}
+.accept p{margin:.6rem 0 0;max-width:54ch;color:#ffffffc4;font-size:.96rem;line-height:1.6}
+.accept strong{color:#fff}
+.accept .btn{margin-top:1rem}
+.accept .result{margin-top:.9rem;color:var(--ink)}

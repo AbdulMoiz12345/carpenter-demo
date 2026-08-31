@@ -26,6 +26,25 @@ import type { Tenant } from './types';
 const API = 'https://services.leadconnectorhq.com';
 const TIMEOUT_MS = 6000;
 
+/**
+ * Every demo shares one GoHighLevel sub-account and one calendar unless
+ * it has been bound to its own. That makes a newly generated demo work
+ * fully — live slots included — with no per-demo setup, which matters
+ * when one is built live on a call.
+ *
+ * It also means contacts from different prospects land in the same
+ * sub-account. Fine while demos are internal. Before real prospects can
+ * submit forms, this has to become one sub-account per vertical, or
+ * prospect A will see prospect B in the contact list.
+ */
+export function locationFor(tenant: Tenant): string | undefined {
+  return tenant.ghl.locationId ?? process.env.GHL_DEFAULT_LOCATION_ID ?? undefined;
+}
+
+export function calendarFor(tenant: Tenant): string | undefined {
+  return tenant.ghl.calendarId ?? process.env.GHL_DEFAULT_CALENDAR_ID ?? undefined;
+}
+
 async function withTimeout(url: string, init: RequestInit) {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
@@ -42,17 +61,38 @@ export type HookResult = { ok: true } | { ok: false; reason: string };
 
 export async function fireWorkflow(url: string | undefined, payload: unknown): Promise<HookResult> {
   if (!url) return { ok: false, reason: 'no-hook-configured' };
+
+  // Environment variables pick up trailing newlines and spaces very
+  // easily, and an invalid URL then surfaces as a bare network error.
+  const clean = url.trim();
   try {
-    const res = await withTimeout(url, {
+    const parsed = new URL(clean);
+    if (parsed.protocol !== 'https:') return { ok: false, reason: `not-https: ${parsed.protocol}` };
+  } catch {
+    return { ok: false, reason: `malformed-url (${clean.slice(0, 60)}…)` };
+  }
+
+  try {
+    const res = await withTimeout(clean, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    return res.ok ? { ok: true } : { ok: false, reason: `ghl-${res.status}` };
+    if (res.ok) return { ok: true };
+    let body = '';
+    try {
+      body = (await res.text()).slice(0, 160);
+    } catch { /* status alone will do */ }
+    console.error('[ghl] inbound hook rejected', res.status, body);
+    return { ok: false, reason: `HTTP ${res.status}${body ? `: ${body}` : ''}` };
   } catch (e) {
     // Never let a GHL failure take down the page. A prospect is watching.
-    console.error('[ghl] inbound hook failed', (e as Error).name);
-    return { ok: false, reason: 'network' };
+    const name = (e as Error).name;
+    console.error('[ghl] inbound hook failed', name);
+    return {
+      ok: false,
+      reason: name === 'TimeoutError' ? 'timed out after 6s' : `network (${name})`
+    };
   }
 }
 
@@ -71,6 +111,8 @@ function authHeaders() {
 export interface Slot {
   iso: string;
   day: string;
+  /** "Sep 3" — shown under the weekday so a slot is unambiguous. */
+  date: string;
   time: string;
 }
 
@@ -83,13 +125,12 @@ export interface Slot {
  */
 export async function getLiveSlots(tenant: Tenant): Promise<Slot[] | null> {
   const h = authHeaders();
-  if (!h || !tenant.ghl.calendarId) return null;
+  const calendarId = calendarFor(tenant);
+  if (!h || !calendarId) return null;
 
   const from = Date.now();
   const to = from + 1000 * 60 * 60 * 24 * 10;
-  const url =
-    `${API}/calendars/${tenant.ghl.calendarId}/free-slots` +
-    `?startDate=${from}&endDate=${to}`;
+  const url = `${API}/calendars/${calendarId}/free-slots?startDate=${from}&endDate=${to}`;
 
   try {
     const res = await withTimeout(url, { headers: h });
@@ -102,8 +143,9 @@ export async function getLiveSlots(tenant: Tenant): Promise<Slot[] | null> {
         const d = new Date(iso);
         out.push({
           iso,
-          day: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-          time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+          day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+          date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
         });
         if (out.length >= 6) return out;
       }
@@ -123,7 +165,9 @@ export async function healthCheck(tenant: Tenant) {
     // though the contact write succeeded.
     hookConfigured: Boolean(tenant.ghl.enquiryHook ?? process.env.GHL_DEFAULT_ENQUIRY_HOOK),
     tokenConfigured: Boolean(h),
-    locationBound: Boolean(tenant.ghl.locationId),
+    locationBound: Boolean(locationFor(tenant)),
+    locationFrom: tenant.ghl.locationId ? 'tenant' : process.env.GHL_DEFAULT_LOCATION_ID ? 'default' : 'none',
+    calendarFrom: tenant.ghl.calendarId ? 'tenant' : process.env.GHL_DEFAULT_CALENDAR_ID ? 'default' : 'none',
     liveSlots: (await getLiveSlots(tenant)) !== null
   };
 }
@@ -159,14 +203,15 @@ export async function upsertContact(
   input: ContactInput
 ): Promise<WriteResult> {
   const h = authHeaders();
-  if (!h || !tenant.ghl.locationId) return { ok: false, reason: 'no-token-or-location' };
+  const locationId = locationFor(tenant);
+  if (!h || !locationId) return { ok: false, reason: 'no-token-or-location' };
 
   try {
     const res = await withTimeout(`${API}/contacts/upsert`, {
       method: 'POST',
       headers: { ...h, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        locationId: tenant.ghl.locationId,
+        locationId,
         firstName: input.firstName,
         lastName: input.lastName,
         email: input.email,
@@ -209,7 +254,9 @@ export async function createAppointment(
   slotIso: string
 ): Promise<WriteResult> {
   const h = authHeaders();
-  if (!h || !tenant.ghl.locationId || !tenant.ghl.calendarId) {
+  const locationId = locationFor(tenant);
+  const calendarId = calendarFor(tenant);
+  if (!h || !locationId || !calendarId) {
     return { ok: false, reason: 'not-configured' };
   }
 
@@ -218,12 +265,16 @@ export async function createAppointment(
       method: 'POST',
       headers: { ...h, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        calendarId: tenant.ghl.calendarId,
-        locationId: tenant.ghl.locationId,
+        calendarId,
+        locationId,
         contactId,
         startTime: slotIso,
         title: 'Site visit',
-        appointmentStatus: 'confirmed'
+        // NOT confirmed. The owner accepts it, which is both truer to how
+        // a trade business actually works — he checks whether he can get
+        // there — and a better demo, because it shows him staying in
+        // control rather than a calendar filling itself.
+        appointmentStatus: 'new'
       })
     });
 

@@ -8,9 +8,7 @@ import Nav from '@/components/Nav';
 import Hero from '@/components/Hero';
 import Services from '@/components/Services';
 import Proof from '@/components/Proof';
-import Booking from '@/components/Booking';
-import Seam from '@/components/Seam';
-import Panels from '@/components/crm/Panels';
+import DemoBody from '@/components/DemoBody';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,9 +34,7 @@ export default async function DemoBySlug({ params }: { params: { slug: string } 
       <Hero tenant={tenant} />
       <Services tenant={tenant} />
       <Proof tenant={tenant} />
-      <Booking tenant={tenant} initialSlots={slots} />
-      <Seam tenant={tenant} />
-      <Panels tenant={tenant} seed={seed} />
+      <DemoBody tenant={tenant} seed={seed} slots={slots} />
       <footer className="wrap foot">
         <span className="name">{tenant.company}</span>
         <span className="mono">

@@ -25,7 +25,7 @@ export interface Seed {
   sms: { side: 'us' | 'them'; t: string; text: string }[];
   pipeline: { stage: string; who: string; val: string; live?: boolean }[];
   jobs: { d: string; w: string; p: string }[];
-  fallbackSlots: { day: string; time: string; iso: string }[];
+  fallbackSlots: { day: string; date: string; time: string; iso: string }[];
 }
 
 export function seedFor(t: Tenant): Seed {
@@ -42,10 +42,20 @@ export function seedFor(t: Tenant): Seed {
     d.setHours(hour, min, 0, 0);
     return d;
   };
-  const dayName = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase();
-  const hhmm = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const dayName = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+  const dateStr = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const hhmm = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-  const slotDates = [plus(2, 9), plus(3, 14), plus(5, 8, 30), plus(6, 11), plus(7, 15, 30), plus(9, 10)];
+  const weekday = (offset: number, hour: number, min = 0) => {
+    const d = plus(offset, hour, min);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    d.setHours(hour, min, 0, 0);
+    return d;
+  };
+  const slotDates = [
+    weekday(1, 9), weekday(2, 14), weekday(3, 8, 30),
+    weekday(4, 11), weekday(7, 15, 30), weekday(8, 10)
+  ];
 
   return {
     kpis: [
@@ -92,6 +102,6 @@ export function seedFor(t: Tenant): Seed {
       { d: dayName(plus(4, 8)), w: `${svc(1)} — ${near(1)}`, p: '1 day' },
       { d: dayName(plus(5, 8)), w: `${svc(2)} — ${near(2)}`, p: '1 day' }
     ],
-    fallbackSlots: slotDates.map((d) => ({ day: dayName(d), time: hhmm(d), iso: d.toISOString() }))
+    fallbackSlots: slotDates.map((d) => ({ day: dayName(d), date: dateStr(d), time: hhmm(d), iso: d.toISOString() }))
   };
 }

@@ -1,5 +1,8 @@
+'use client';
+
 import type { Tenant } from '@/lib/types';
 import type { Seed } from '@/lib/seed';
+import type { Submission } from '../OwnerView';
 
 /**
  * The CRM half. Seeded, not live — an empty dashboard destroys the
@@ -9,9 +12,17 @@ import type { Seed } from '@/lib/seed';
  * label. "You missed this call at 2:14pm. They got a text at 2:14pm."
  * is a pitch; "Automated SMS Workflow" is a screenshot.
  */
-export default function Panels({ tenant, seed }: { tenant: Tenant; seed: Seed }) {
+export default function Panels({
+  tenant,
+  seed,
+  submission
+}: {
+  tenant: Tenant;
+  seed: Seed;
+  submission?: Submission | null;
+}) {
   return (
-    <section className="crm">
+    <>
       <div className="wrap">
         <div className="kpis">
           {seed.kpis.map((k) => (
@@ -64,6 +75,18 @@ export default function Panels({ tenant, seed }: { tenant: Tenant; seed: Seed })
             <h3>Every quote, where it stands</h3>
             <p className="note">No notebook. No &ldquo;did I chase that one?&rdquo;</p>
             <div className="pipe">
+              {/* Their own submission, at the top, marked as live. Watching
+                  your own enquiry appear is more persuasive than any
+                  amount of seeded history. */}
+              {submission && (
+                <div className="stage live stage-new">
+                  <span className="mono">Enquiry</span>
+                  <span className="who">
+                    {submission.name} — {submission.message || 'new enquiry'}
+                  </span>
+                  <span className="val">just now</span>
+                </div>
+              )}
               {seed.pipeline.map((p) => (
                 <div className={`stage${p.live ? ' live' : ''}`} key={p.stage}>
                   <span className="mono">{p.stage}</span>
@@ -89,6 +112,6 @@ export default function Panels({ tenant, seed }: { tenant: Tenant; seed: Seed })
           </div>
         </div>
       </div>
-    </section>
+    </>
   );
 }

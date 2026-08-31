@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { resolveTenantForApi } from '@/lib/tenants';
-import { upsertContact, fireWorkflow, hasToken } from '@/lib/ghl';
+import { upsertContact, fireWorkflow, hasToken, locationFor } from '@/lib/ghl';
 import { rateLimit, clientKey } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
@@ -63,6 +63,7 @@ export async function POST(req: Request) {
   // than blaming a missing webhook. A misleading error costs more time
   // than no error at all.
   let apiFailure: string | null = null;
+  let hookFailure: string | null = null;
   const hook = tenant.ghl.enquiryHook ?? process.env.GHL_DEFAULT_ENQUIRY_HOOK;
 
   // ── Path 1: inbound webhook — fires reliably ─────────────────────
@@ -86,12 +87,16 @@ export async function POST(req: Request) {
         detail: 'Sent to GoHighLevel — the workflow has fired.'
       });
     }
-    apiFailure = `webhook ${res.reason}`;
+    // Record it, but keep going — a contact is still worth creating.
+    // The reason is reported even if the token path then succeeds,
+    // because "sent" while the workflow never ran is the worst
+    // possible outcome to hide.
+    hookFailure = res.reason;
   }
 
   // ── Path 2: token — creates a real contact, but see the note above
   //    about why this is not a dependable trigger ─────────────────
-  if (hasToken() && tenant.ghl.locationId) {
+  if (hasToken() && locationFor(tenant)) {
     const res = await upsertContact(tenant, {
       firstName,
       lastName: rest.join(' ') || undefined,
@@ -109,10 +114,13 @@ export async function POST(req: Request) {
         live: true,
         via: 'api',
         contactId: res.contactId,
-        detail:
-          'Contact created and tagged. Note: GoHighLevel does not fire a ' +
-          '"tag added" trigger for a contact created with tags, so set ' +
-          'GHL_DEFAULT_ENQUIRY_HOOK if the workflow needs to run.'
+        hookFailure,
+        detail: hookFailure
+          ? `Contact created, but the webhook failed (${hookFailure}) — so no ` +
+            `workflow ran. GoHighLevel does not fire a "tag added" trigger for ` +
+            `a contact created with tags.`
+          : 'Contact created and tagged. No webhook is configured, so a ' +
+            'workflow may not have fired — set GHL_DEFAULT_ENQUIRY_HOOK.'
       });
     }
     apiFailure = res.reason;
@@ -126,7 +134,7 @@ export async function POST(req: Request) {
     detail = `Form works, but GoHighLevel refused the write — ${apiFailure}`;
   } else if (!hasToken()) {
     detail = 'Form works — GHL_TOKEN is not set on this deployment.';
-  } else if (!tenant.ghl.locationId) {
+  } else if (!locationFor(tenant)) {
     detail = 'Form works — this demo has no GHL sub-account bound yet.';
   } else {
     detail = 'Form works — no workflow connected yet, so nothing was sent.';
