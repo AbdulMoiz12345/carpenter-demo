@@ -82,7 +82,7 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
 
   if (!enabled) {
     return (
-      <main className="wrap" style={{ paddingTop: '5rem', paddingBottom: '5rem' }}>
+      <main className="st">
         <span className="mono">Studio</span>
         <h1 className="disp" style={{ fontSize: 'clamp(1.8rem,5vw,3rem)', margin: '.8rem 0' }}>
           Studio is switched off
@@ -96,32 +96,26 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <main className="wrap" style={{ paddingTop: '2.5rem', paddingBottom: '5rem', maxWidth: 980 }}>
-      <span className="mono">Caito360 · demo studio</span>
-      <h1 className="disp" style={{ fontSize: 'clamp(1.8rem,5vw,2.8rem)', margin: '.6rem 0 .3rem' }}>
-        Build a demo
-      </h1>
-      <p style={{ color: 'var(--ink-2)', maxWidth: '52ch', marginTop: 0 }}>
-        Read it off their website, or type it in. Either way you get a live, branded
-        demo in under a minute.
-      </p>
+    <main className="st">
+      <header className="st-head">
+        <span className="mono">Caito360 &middot; demo studio</span>
+        <h1 className="disp">Build a demo</h1>
+        <p>
+          Read it off their website, or type it in. Either way you get a live, branded demo in
+          under a minute &mdash; no build, no deployment, no DNS.
+        </p>
+      </header>
 
-      {/* ── mode ── */}
-      <div style={{ display: 'flex', gap: '.5rem', margin: '1.6rem 0 1.2rem' }}>
+      <div className="st-modes">
         {(['url', 'manual'] as const).map((m) => (
-          <button key={m} className="btn" onClick={() => setMode(m)}
-            style={{
-              background: mode === m ? 'var(--brand-ink)' : 'transparent',
-              color: mode === m ? '#fff' : 'var(--ink)',
-              border: mode === m ? 'none' : '1px solid var(--rule)'
-            }}>
+          <button key={m} className="st-mode" aria-pressed={mode === m} onClick={() => setMode(m)}>
             {m === 'url' ? 'From their website' : 'Enter manually'}
           </button>
         ))}
       </div>
 
       {mode === 'url' && (
-        <div className="form" style={{ marginBottom: '1.5rem' }}>
+        <div className="form st-card">
           <div className="field">
             <label className="mono" htmlFor="s-url">Their website</label>
             <input id="s-url" value={url} onChange={(e) => setUrl(e.target.value)}
@@ -130,23 +124,26 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
           <button className="btn btn-primary" onClick={extract} disabled={busy !== ''}>
             {busy === 'extract' ? 'Reading their site…' : 'Read their site'}
           </button>
-          <p className="mono" style={{ marginTop: '.8rem', textTransform: 'none', letterSpacing: 0 }}>
-            Pulls their logo, brand colour, services and city. Review everything below before building.
+          <p className="st-hint">
+            Pulls their logo, brand colour, services, photos, reviews and city. Everything below is
+            editable &mdash; extraction is good, not perfect.
           </p>
         </div>
       )}
 
-      {err && <div className="result bad" style={{ marginBottom: '1.2rem' }}>{err}</div>}
+      {err && <div className="result bad st-gap">{err}</div>}
 
       {d.notes.length > 0 && (
-        <div className="result" style={{ marginBottom: '1.2rem' }}>
-          {d.notes.map((n, i) => <div key={i}>{n}</div>)}
+        <div className="st-notes">
+          <span className="mono">Extraction report</span>
+          {d.notes.map((n, i) => (
+            <div key={i}>{n}</div>
+          ))}
         </div>
       )}
 
-      {/* ── the draft ── */}
-      <div className="form">
-        <div style={{ display: 'grid', gap: '.85rem', gridTemplateColumns: '1fr 1fr' }}>
+      <div className="form st-card">
+        <div className="st-fields">
           <div className="field" style={{ gridColumn: '1 / -1' }}>
             <label className="mono" htmlFor="s-co">Business name *</label>
             <input id="s-co" value={d.company} onChange={(e) => set('company', e.target.value)}
@@ -211,7 +208,7 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
           </div>
         </div>
 
-        <div style={{ borderTop: '1px solid var(--rule)', margin: '.6rem 0 1rem', paddingTop: '1rem' }}>
+        <div className="st-services">
           <span className="mono">Services</span>
           {d.services.map((s, i) => (
             <div key={i} style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
@@ -240,16 +237,14 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
       </div>
 
       {built && (
-        <div className="result" style={{ marginTop: '1.4rem' }}>
-          <b>Demo {built.result}.</b> One database row — no build, no deployment, no DNS.
-          <div style={{ marginTop: '.9rem', display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
-            <a className="btn btn-primary" href={built.path} target="_blank" rel="noreferrer">
-              Open the demo
-            </a>
-            <a className="btn btn-ghost" href={`${built.path}?owner=1`} target="_blank" rel="noreferrer">
-              Open with owner view
-            </a>
-          </div>
+        <div className="st-built">
+          <span className="mono">Demo {built.result}</span>
+          <h2>It&rsquo;s live</h2>
+          <p>One database row. No build, no deployment, no DNS change.</p>
+          <code>{built.path}</code>
+          <a className="btn btn-primary" href={built.path} target="_blank" rel="noreferrer">
+            Open the demo
+          </a>
         </div>
       )}
     </main>

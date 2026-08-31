@@ -110,11 +110,26 @@ function authHeaders() {
 
 export interface Slot {
   iso: string;
+  /** "Wed" */
   day: string;
-  /** "Sep 3" — shown under the weekday so a slot is unambiguous. */
+  /** "Sep 2" */
   date: string;
+  /** "2026-09-02" — groups slots into days in the picker. */
+  dayKey: string;
+  /** "1:00 PM" */
   time: string;
 }
+
+/**
+ * Spread across days rather than taking the first N in a row.
+ *
+ * GoHighLevel returns free slots in chronological order, so a naive
+ * slice gave six times on one afternoon — which reads as "this business
+ * has almost no availability". Capping per day and reaching further out
+ * shows a real week.
+ */
+const SLOTS_PER_DAY = 4;
+const DAYS_SHOWN = 5;
 
 /**
  * Live availability, or null when unavailable.
@@ -129,7 +144,7 @@ export async function getLiveSlots(tenant: Tenant): Promise<Slot[] | null> {
   if (!h || !calendarId) return null;
 
   const from = Date.now();
-  const to = from + 1000 * 60 * 60 * 24 * 10;
+  const to = from + 1000 * 60 * 60 * 24 * 21;
   const url = `${API}/calendars/${calendarId}/free-slots?startDate=${from}&endDate=${to}`;
 
   try {
@@ -137,19 +152,25 @@ export async function getLiveSlots(tenant: Tenant): Promise<Slot[] | null> {
     if (!res.ok) return null;
     const json = (await res.json()) as Record<string, { slots?: string[] }>;
 
-    const out: Slot[] = [];
+    const byDay = new Map<string, Slot[]>();
     for (const day of Object.values(json)) {
       for (const iso of day.slots ?? []) {
         const d = new Date(iso);
-        out.push({
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const bucket = byDay.get(dayKey) ?? [];
+        if (bucket.length >= SLOTS_PER_DAY) continue;
+        bucket.push({
           iso,
+          dayKey,
           day: d.toLocaleDateString('en-US', { weekday: 'short' }),
           date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
           time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
         });
-        if (out.length >= 6) return out;
+        byDay.set(dayKey, bucket);
       }
     }
+
+    const out = [...byDay.keys()].sort().slice(0, DAYS_SHOWN).flatMap((k) => byDay.get(k)!);
     return out.length ? out : null;
   } catch {
     return null;

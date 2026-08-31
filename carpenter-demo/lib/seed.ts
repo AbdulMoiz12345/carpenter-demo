@@ -25,7 +25,7 @@ export interface Seed {
   sms: { side: 'us' | 'them'; t: string; text: string }[];
   pipeline: { stage: string; who: string; val: string; live?: boolean }[];
   jobs: { d: string; w: string; p: string }[];
-  fallbackSlots: { day: string; date: string; time: string; iso: string }[];
+  fallbackSlots: { day: string; date: string; dayKey: string; time: string; iso: string }[];
 }
 
 export function seedFor(t: Tenant): Seed {
@@ -42,7 +42,7 @@ export function seedFor(t: Tenant): Seed {
     d.setHours(hour, min, 0, 0);
     return d;
   };
-  const dayName = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+  const dayName = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' });
   const dateStr = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const hhmm = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
@@ -52,10 +52,14 @@ export function seedFor(t: Tenant): Seed {
     d.setHours(hour, min, 0, 0);
     return d;
   };
-  const slotDates = [
-    weekday(1, 9), weekday(2, 14), weekday(3, 8, 30),
-    weekday(4, 11), weekday(7, 15, 30), weekday(8, 10)
-  ];
+  // Four times across four working days — enough to look like a real
+  // diary rather than one lonely afternoon.
+  const slotDates: Date[] = [];
+  for (const offset of [1, 2, 3, 4]) {
+    for (const [h, m] of [[9, 0], [11, 30], [14, 0], [16, 0]] as const) {
+      slotDates.push(weekday(offset, h, m));
+    }
+  }
 
   return {
     kpis: [
@@ -102,6 +106,12 @@ export function seedFor(t: Tenant): Seed {
       { d: dayName(plus(4, 8)), w: `${svc(1)} — ${near(1)}`, p: '1 day' },
       { d: dayName(plus(5, 8)), w: `${svc(2)} — ${near(2)}`, p: '1 day' }
     ],
-    fallbackSlots: slotDates.map((d) => ({ day: dayName(d), date: dateStr(d), time: hhmm(d), iso: d.toISOString() }))
+    fallbackSlots: slotDates.map((d) => ({
+      day: dayName(d),
+      date: dateStr(d),
+      dayKey: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+      time: hhmm(d),
+      iso: d.toISOString()
+    }))
   };
 }

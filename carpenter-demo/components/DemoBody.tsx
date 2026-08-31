@@ -3,20 +3,18 @@
 import { useState } from 'react';
 import type { Tenant } from '@/lib/types';
 import type { Seed } from '@/lib/seed';
-import Booking from './Booking';
+import Booking, { type Slot } from './Booking';
 import Seam from './Seam';
 import Panels from './crm/Panels';
-import OwnerView, { type Submission } from './OwnerView';
-
-type Slot = { day: string; date: string; time: string; iso: string };
+import BookedModal from './BookedModal';
+import type { Submission } from './OwnerView';
 
 /**
- * Holds the one piece of state the demo needs: what was just submitted.
+ * Holds the one piece of state the demo needs: what was just booked.
  *
- * Everything above the fold is a server component — branding is injected
- * server-side so the page arrives already themed, with no flash of
- * unstyled content. Only this lower half needs interactivity, so the
- * client boundary starts here rather than at the page root.
+ * Everything above the fold stays a server component, so branding is
+ * injected server-side and the page arrives already themed with no flash
+ * of unstyled content. The client boundary starts here.
  */
 export default function DemoBody({
   tenant,
@@ -28,54 +26,27 @@ export default function DemoBody({
   slots: Slot[];
 }) {
   const [submission, setSubmission] = useState<Submission | null>(null);
-  const [view, setView] = useState<'behind' | 'owner'>('behind');
-
-  function onSubmitted(s: Submission) {
-    setSubmission(s);
-    // Move them to the owner side automatically: they have just acted as
-    // the customer, so the interesting half is now the other one.
-    setView('owner');
-    // Scroll it into sight rather than leaving them wondering where it went.
-    requestAnimationFrame(() => {
-      document.getElementById('behind')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }
+  const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Booking tenant={tenant} initialSlots={slots} onSubmitted={onSubmitted} />
+      <Booking
+        tenant={tenant}
+        initialSlots={slots}
+        onBooked={(s) => {
+          setSubmission(s);
+          setOpen(true);
+        }}
+      />
 
       <Seam tenant={tenant} />
-
       <section className="crm" id="behind">
-        <div className="wrap">
-          <div className="switch" role="tablist" aria-label="Which side to view">
-            <button
-              role="tab"
-              aria-selected={view === 'behind'}
-              onClick={() => setView('behind')}
-            >
-              What runs behind it
-            </button>
-            <button
-              role="tab"
-              aria-selected={view === 'owner'}
-              onClick={() => setView('owner')}
-            >
-              What {tenant.short} receives
-              {submission && <i className="dot" aria-hidden="true" />}
-            </button>
-          </div>
-        </div>
-
-        {view === 'behind' ? (
-          <Panels tenant={tenant} seed={seed} submission={submission} />
-        ) : (
-          <div className="wrap">
-            <OwnerView tenant={tenant} submission={submission} />
-          </div>
-        )}
+        <Panels tenant={tenant} seed={seed} submission={submission} />
       </section>
+
+      {open && submission && (
+        <BookedModal tenant={tenant} submission={submission} onClose={() => setOpen(false)} />
+      )}
     </>
   );
 }

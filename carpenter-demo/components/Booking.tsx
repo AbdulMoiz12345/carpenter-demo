@@ -1,190 +1,210 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Tenant } from '@/lib/types';
 import type { Submission } from './OwnerView';
 
-type Slot = { day: string; date: string; time: string; iso: string };
-type Msg = { text: string; bad?: boolean } | null;
+export type Slot = { iso: string; day: string; date: string; dayKey: string; time: string };
 
 /**
- * The two live interactions in the demo.
+ * BOOKING
  *
- * Both POST to our own API routes — never to GoHighLevel directly.
- * The browser has no token, no location id and no webhook URL, so
- * there is nothing here for a prospect to find in devtools.
+ * Pick a day, then a time — rather than a flat grid of six slots that all
+ * landed on one afternoon and made the business look like it had no
+ * availability at all.
+ *
+ * The separate enquiry form is gone. Two competing calls to action split
+ * attention, and the booking is the one that demonstrates something: it
+ * puts a real appointment in a real calendar and starts a real approval
+ * flow.
  */
 export default function Booking({
   tenant,
   initialSlots,
-  onSubmitted
+  onBooked
 }: {
   tenant: Tenant;
   initialSlots: Slot[];
-  onSubmitted?: (s: Submission) => void;
+  onBooked?: (s: Submission) => void;
 }) {
-  /**
-   * On a real demo subdomain the server knows the tenant from the
-   * hostname and this is ignored. It only matters for /d/<slug>, where
-   * every demo shares one hostname.
-   */
-  const q = typeof window !== 'undefined' && window.location.pathname.startsWith('/d/')
-    ? `?d=${encodeURIComponent(tenant.slug)}`
-    : '';
   const [slots, setSlots] = useState<Slot[]>(initialSlots);
-  const [chosen, setChosen] = useState(0);
+  const [dayKey, setDayKey] = useState(initialSlots[0]?.dayKey ?? '');
+  const [chosen, setChosen] = useState(initialSlots[0]?.iso ?? '');
+
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
-  const [website, setWebsite] = useState(''); // honeypot
-  const [busy, setBusy] = useState<'' | 'enquiry' | 'booking'>('');
-  const [msg, setMsg] = useState<Msg>(null);
+  const [note, setNote] = useState('');
+  const [honey, setHoney] = useState('');
 
-  // Refresh availability from the server so slots are current at open.
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  // Refresh from the server so availability is current at open.
   useEffect(() => {
+    const q = window.location.pathname.startsWith('/d/')
+      ? `?d=${encodeURIComponent(tenant.slug)}`
+      : '';
     fetch(`/api/slots${q}`)
       .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d.slots) && d.slots.length) setSlots(d.slots); })
-      .catch(() => { /* keep server-rendered slots */ });
-  }, []);
-
-  async function post(url: string, body: unknown, kind: 'enquiry' | 'booking') {
-    setBusy(kind);
-    setMsg(null);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+      .then((d) => {
+        if (Array.isArray(d.slots) && d.slots.length) {
+          setSlots(d.slots);
+          setDayKey(d.slots[0].dayKey);
+          setChosen(d.slots[0].iso);
+        }
+      })
+      .catch(() => {
+        /* keep the server-rendered slots */
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setMsg({ text: data.error ?? `Request failed (${res.status}).`, bad: true });
-        return null;
-      }
-      return data;
-    } catch {
-      setMsg({ text: 'Could not reach the server. Try again.', bad: true });
-    } finally {
-      setBusy('');
-    }
-  }
+  }, [tenant.slug]);
 
-  async function sendEnquiry() {
-    if (!name.trim() || phone.trim().length < 6) {
-      return setMsg({ text: 'Add your name and a mobile number.', bad: true });
-    }
-    const data = await post(`/api/enquiry${q}`, { name, phone, email: email || undefined, message, website }, 'enquiry');
-    if (!data) return;
-    if (!data.live) {
-      return setMsg({ text: data.detail ?? 'Form works, but nothing was sent.', bad: true });
-    }
-    // `via` matters: the webhook path fires a workflow reliably, the
-    // token path creates a contact but may not trigger anything, so a
-    // "sent" that hides which ran is worse than no message.
-    setMsg({
-      text:
-        data.via === 'webhook'
-          ? `Sent. ${name.split(' ')[0]} gets a message from ${tenant.short} in about ten seconds.`
-          : `Contact created in GoHighLevel, but via the API rather than the webhook — ` +
-            `a workflow may not have fired. Set GHL_DEFAULT_ENQUIRY_HOOK.`,
-      bad: data.via !== 'webhook'
-    });
+  const days = useMemo(() => {
+    const seen = new Map<string, Slot>();
+    for (const s of slots) if (!seen.has(s.dayKey)) seen.set(s.dayKey, s);
+    return [...seen.values()];
+  }, [slots]);
 
-    onSubmitted?.({
-      name, email, phone, message,
-      at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-      via: data.via
-    });
-  }
+  const times = useMemo(() => slots.filter((s) => s.dayKey === dayKey), [slots, dayKey]);
+  const active = slots.find((s) => s.iso === chosen);
 
   async function book() {
-    const slot = slots[chosen];
-    if (!slot) return;
-    if (!name.trim() || phone.trim().length < 6) {
-      return setMsg({ text: 'Add your name and mobile, then book.', bad: true });
-    }
-    const data = await post(`/api/booking${q}`, { name, phone, email: email || undefined, slotIso: slot.iso }, 'booking');
-    if (!data) return;
-    setMsg({
-      text: data.live
-        ? `Booked for ${data.label} — confirmation sent.`
-        : `Slot held for ${slot.day} ${slot.time} — no workflow connected, so no confirmation was sent.`,
-      bad: !data.live
-    });
+    if (!name.trim()) return setErr('Add your name.');
+    if (phone.trim().length < 6) return setErr('Add a phone number.');
+    if (!chosen) return setErr('Pick a time.');
 
-    onSubmitted?.({
-      name, email, phone, message,
-      slotLabel: data.label ?? `${slot.day} ${slot.date} at ${slot.time}`,
-      at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-      via: data.via
-    });
+    setBusy(true);
+    setErr('');
+    try {
+      const q = window.location.pathname.startsWith('/d/')
+        ? `?d=${encodeURIComponent(tenant.slug)}`
+        : '';
+      const res = await fetch(`/api/booking${q}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          phone,
+          email: email || undefined,
+          slotIso: chosen,
+          website: honey || undefined
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) return setErr(data.error ?? `Request failed (${res.status}).`);
+
+      onBooked?.({
+        name,
+        email,
+        phone,
+        message: note,
+        slotLabel: data.label ?? `${active?.day} ${active?.date} at ${active?.time}`,
+        at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        via: data.via
+      });
+    } catch {
+      setErr('Could not reach the server. Try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <section className="band wrap" id="book">
-      <div className="book">
-        <div>
-          <h2 className="disp">Book a site visit</h2>
-          <p className="book-lede">
-            Pick a slot. You&rsquo;ll get a text confirmation straight away, and a reminder the day before.
-          </p>
-          <span className="mono">Next available</span>
-          <div className="slots">
-            {slots.map((s, i) => (
+      <div className="band-head">
+        <h2 className="disp">Book a free estimate</h2>
+        <span className="mono">
+          {days.length} day{days.length === 1 ? '' : 's'} available
+        </span>
+      </div>
+
+      <div className="bk">
+        <div className="bk-cal">
+          <span className="mono">Choose a day</span>
+          <div className="bk-days">
+            {days.map((d) => (
               <button
-                key={s.iso}
-                className="slot"
-                aria-pressed={i === chosen}
-                onClick={() => setChosen(i)}
+                key={d.dayKey}
+                className="bk-day"
+                aria-pressed={d.dayKey === dayKey}
+                onClick={() => {
+                  setDayKey(d.dayKey);
+                  const first = slots.find((s) => s.dayKey === d.dayKey);
+                  if (first) setChosen(first.iso);
+                }}
               >
-                <em>{s.day}</em>
-                <b>{s.time}</b>
-                <u>{s.date}</u>
+                <em>{d.day}</em>
+                <b>{d.date.split(' ')[1]}</b>
+                <u>{d.date.split(' ')[0]}</u>
               </button>
             ))}
           </div>
-          <div style={{ marginTop: '1rem' }}>
-            <button className="btn btn-primary" onClick={book} disabled={busy !== ''}>
-              {busy === 'booking' ? 'Booking…' : 'Book this slot'}
-            </button>
+
+          <span className="mono bk-label2">Choose a time</span>
+          <div className="bk-times">
+            {times.map((s) => (
+              <button
+                key={s.iso}
+                className="bk-time"
+                aria-pressed={s.iso === chosen}
+                onClick={() => setChosen(s.iso)}
+              >
+                {s.time}
+              </button>
+            ))}
           </div>
+
+          <p className="bk-note">
+            Visits take about 45 minutes. Nothing is confirmed until {tenant.short} accepts —
+            you&rsquo;ll hear either way.
+          </p>
         </div>
 
-        <div className="form">
-          <span className="mono">Or send the details</span>
-          <div style={{ height: '1rem' }} />
+        <div className="bk-form">
+          {active && (
+            <div className="bk-chosen">
+              <span className="mono">You&rsquo;re requesting</span>
+              <b>
+                {active.day} {active.date}
+              </b>
+              <i>{active.time}</i>
+            </div>
+          )}
+
           <div className="field">
-            <label className="mono" htmlFor="f-name">Your name</label>
-            <input id="f-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="James Whitfield" />
+            <label className="mono" htmlFor="b-name">Your name</label>
+            <input id="b-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="James Whitfield" />
           </div>
           <div className="field">
-            <label className="mono" htmlFor="f-phone">Phone</label>
-            <input id="f-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(972) 555-0142" />
+            <label className="mono" htmlFor="b-phone">Phone</label>
+            <input id="b-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(972) 555-0142" />
           </div>
           <div className="field">
-            <label className="mono" htmlFor="f-email">Email</label>
-            <input id="f-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+            <label className="mono" htmlFor="b-email">Email</label>
+            <input id="b-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
           </div>
           <div className="field">
-            <label className="mono" htmlFor="f-job">What do you need?</label>
+            <label className="mono" htmlFor="b-note">
+              What do you need? <span className="opt">optional</span>
+            </label>
             <textarea
-              id="f-job"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder={`${tenant.services[0].name} in the front room, roughly 2.4m wide.`}
+              id="b-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={`${tenant.services[0]?.name ?? 'Custom cabinetry'} — roughly 8 feet wide.`}
             />
           </div>
+
           {/* Honeypot — real people never fill this in. */}
           <div className="hp" aria-hidden="true">
-            <label htmlFor="f-web">Website</label>
-            <input id="f-web" tabIndex={-1} value={website} onChange={(e) => setWebsite(e.target.value)} />
+            <label htmlFor="b-web">Website</label>
+            <input id="b-web" tabIndex={-1} value={honey} onChange={(e) => setHoney(e.target.value)} />
           </div>
-          <button className="btn btn-primary" onClick={sendEnquiry} disabled={busy !== ''}>
-            {busy === 'enquiry' ? 'Sending…' : 'Send enquiry'}
+
+          <button className="btn btn-primary bk-go" onClick={book} disabled={busy}>
+            {busy ? 'Requesting\u2026' : 'Request this visit'}
           </button>
-          {msg && <div className={`result${msg.bad ? ' bad' : ''}`}>{msg.text}</div>}
+          {err && <div className="result bad">{err}</div>}
         </div>
       </div>
     </section>
