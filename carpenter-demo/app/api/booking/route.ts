@@ -18,7 +18,15 @@ const Body = z.object({
   name: z.string().trim().min(1).max(120),
   phone: z.string().trim().min(6).max(32),
   email: z.string().trim().email().max(160).optional(),
-  slotIso: z.string().datetime()
+  /**
+   * GoHighLevel returns free slots with a timezone OFFSET
+   * ("2026-09-02T13:00:00-05:00"), not a UTC "Z". Zod's .datetime()
+   * rejects offsets unless told otherwise, so live slots failed
+   * validation while seeded ones (which use toISOString) passed.
+   * Accept both, and keep the original string — GHL expects the same
+   * format back when the appointment is created.
+   */
+  slotIso: z.string().datetime({ offset: true })
 });
 
 /**
@@ -38,7 +46,13 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Pick a slot and add your details.' }, { status: 400 });
+    // Name the field. "Pick a slot and add your details" while a slot was
+    // plainly selected sent us looking in the wrong place entirely.
+    const issues = parsed.error.issues
+      .map((i) => `${i.path.join('.') || 'body'}: ${i.message}`)
+      .join('; ');
+    console.error('[booking] validation failed —', issues);
+    return NextResponse.json({ error: `Could not book — ${issues}` }, { status: 400 });
   }
   let hookFailure: string | null = null;
   const { name, phone, email, slotIso } = parsed.data;

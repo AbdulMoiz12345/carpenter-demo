@@ -59,7 +59,10 @@ export default function Booking({
         body: JSON.stringify(body)
       });
       const data = await res.json();
-      if (!res.ok) return setMsg({ text: data.error ?? 'Something went wrong.', bad: true });
+      if (!res.ok) {
+        setMsg({ text: data.error ?? `Request failed (${res.status}).`, bad: true });
+        return null;
+      }
       return data;
     } catch {
       setMsg({ text: 'Could not reach the server. Try again.', bad: true });

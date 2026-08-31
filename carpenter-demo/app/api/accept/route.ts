@@ -33,7 +33,10 @@ export async function POST(req: Request) {
   if (!tenant) return NextResponse.json({ error: 'Unknown demo.' }, { status: 404 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: 'Nothing to accept.' }, { status: 400 });
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+    return NextResponse.json({ error: `Could not accept — ${issues}` }, { status: 400 });
+  }
 
   const { name, email, phone, slotLabel } = parsed.data;
 
