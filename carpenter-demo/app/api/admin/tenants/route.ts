@@ -40,7 +40,16 @@ const TenantIn = z.object({
   ]),
   // Validated, not merely accepted: this string is injected into a
   // stylesheet, so anything other than a hex literal is rejected.
-  colors: z.object({ primary: Hex }),
+  colors: z.object({ primary: Hex, accent: Hex.optional() }),
+  design: z
+    .object({
+      display: z.string().max(60),
+      body: z.string().max(60),
+      radius: z.number().min(0).max(18),
+      upper: z.boolean(),
+      layout: z.enum(['photo-right', 'photo-left', 'photo-below', 'text-only'])
+    })
+    .optional(),
 
   services: z.array(z.object({ name: z.string().max(80), tag: z.string().max(60).default('') })).max(8).default([]),
   work: z.array(z.object({ title: z.string().max(120), where: z.string().max(80).default('') })).max(6).default([]),

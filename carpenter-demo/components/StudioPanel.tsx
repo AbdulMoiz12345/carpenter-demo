@@ -8,11 +8,14 @@ type Logo = { type: 'wordmark' } | { type: 'image'; url: string; from?: string }
 interface Draft {
   company: string; short: string; headline: [string, string]; tagline: string;
   city: string; nearby: string[]; phone: string; since: number;
-  logo: Logo; colors: { primary: string };
+  logo: Logo; colors: { primary: string; accent?: string };
   services: Service[]; work: { title: string; where: string }[];
   images: string[];
   testimonials: { quote: string; author: string }[];
   credentials: string[];
+  rating: string;
+  reviewCount: number;
+  design?: { display: string; body: string; radius: number; upper: boolean; layout: string };
   notes: string[];
 }
 
@@ -26,7 +29,8 @@ const BLANK: Draft = {
     { name: 'Trim and finish carpentry', tag: '' },
     { name: 'Interior doors', tag: '' }
   ],
-  work: [], images: [], testimonials: [], credentials: [], notes: []
+  work: [], images: [], testimonials: [], credentials: [],
+  rating: '', reviewCount: 0, notes: []
 };
 
 export default function StudioPanel({ enabled }: { enabled: boolean }) {
@@ -69,7 +73,9 @@ export default function StudioPanel({ enabled }: { enabled: boolean }) {
           headline: d.headline, nearby: d.nearby, since: Number(d.since) || 0,
           services: d.services.filter((s) => s.name.trim()),
           work: d.work.filter((w) => w.title.trim()), logo: d.logo,
-          images: d.images, testimonials: d.testimonials, credentials: d.credentials
+          images: d.images, testimonials: d.testimonials, credentials: d.credentials,
+          rating: d.rating, reviewCount: d.reviewCount,
+          accent: d.colors.accent, design: d.design
         })
       });
       const j = await r.json();

@@ -65,11 +65,33 @@ export function initials(company: string): string {
  * unstyled content, which is the most obvious possible tell that
  * a demo is templated.
  */
-export function brandVars(primary: string): Record<string, string> {
+export function brandVars(
+  primary: string,
+  opts?: { accent?: string; design?: { display: string; body: string; radius: number; upper: boolean } }
+): Record<string, string> {
   const safe = isValidHex(primary) ? primary : '#8B5E34';
-  return {
+  const vars: Record<string, string> = {
     '--brand': safe,
     '--brand-ink': contrastSafe(safe),
     '--brand-wash': safe + '14'
   };
+
+  // A second brand colour, when their CSS declared one. Contrast-checked
+  // like the first, because it is used behind white text too.
+  if (opts?.accent && isValidHex(opts.accent)) {
+    vars['--accent'] = opts.accent;
+    vars['--accent-ink'] = contrastSafe(opts.accent);
+  }
+
+  // Their typography and corner rounding. Only whitelisted font families
+  // reach here, so these strings are safe to put in CSS.
+  if (opts?.design) {
+    const d = opts.design;
+    vars['--fdisp'] = `'${d.display}', system-ui, sans-serif`;
+    vars['--fbody'] = `'${d.body}', system-ui, sans-serif`;
+    vars['--r'] = `${Math.max(0, Math.min(18, d.radius))}px`;
+    vars['--h-case'] = d.upper ? 'uppercase' : 'none';
+    vars['--h-track'] = d.upper ? '0.01em' : '-0.03em';
+  }
+  return vars;
 }

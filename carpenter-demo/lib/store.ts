@@ -66,6 +66,7 @@ function rowToTenant(r: Row): Tenant {
     reviews: (r.reviews as number) ?? 0,
     logo: r.logo as Tenant['logo'],
     colors: r.colors as Tenant['colors'],
+    design: (r.design as Tenant['design']) ?? undefined,
     services: (r.services as Tenant['services']) ?? [],
     work: (r.work as Tenant['work']) ?? [],
     images: (r.images as string[]) ?? [],
@@ -128,10 +129,11 @@ export async function upsertTenant(t: Tenant & { meta?: unknown }): Promise<'cre
     `insert into tenants (
        slug, domain, status, source, company, short, headline, tagline,
        city, nearby, phone, since, rating, reviews, logo, colors,
-       services, work, ghl, meta, images, testimonials, credentials, email
+       services, work, ghl, meta, images, testimonials, credentials, email,
+       design
      ) values (
        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-       $21,$22,$23,$24
+       $21,$22,$23,$24,$25
      )
      on conflict (slug) do update set
        domain = excluded.domain, status = excluded.status,
@@ -150,7 +152,7 @@ export async function upsertTenant(t: Tenant & { meta?: unknown }): Promise<'cre
        ghl = tenants.ghl || excluded.ghl,
        meta = excluded.meta, images = excluded.images,
        testimonials = excluded.testimonials, credentials = excluded.credentials,
-       email = excluded.email, updated_at = now()
+       email = excluded.email, design = excluded.design, updated_at = now()
      returning (xmax = 0) as created`,
     [
       t.slug, t.domain, t.status ?? 'ACTIVE', t.source ?? 'website',
@@ -161,7 +163,8 @@ export async function upsertTenant(t: Tenant & { meta?: unknown }): Promise<'cre
       JSON.stringify(t.services ?? []), JSON.stringify(t.work ?? []),
       JSON.stringify(t.ghl ?? {}), JSON.stringify(t.meta ?? {}),
       JSON.stringify(t.images ?? []), JSON.stringify(t.testimonials ?? []),
-      JSON.stringify(t.credentials ?? []), t.email ?? ''
+      JSON.stringify(t.credentials ?? []), t.email ?? '',
+      t.design ? JSON.stringify(t.design) : null
     ]
   );
 

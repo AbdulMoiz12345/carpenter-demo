@@ -11,6 +11,12 @@
   --fdisp:'Bricolage Grotesque', system-ui, sans-serif;
   --fbody:'Instrument Sans', system-ui, sans-serif;
   --fmono:'Martian Mono', ui-monospace, monospace;
+  /* Overridden per tenant from their own CSS. */
+  --r:3px;
+  --h-case:none;
+  --h-track:-.03em;
+  --accent:var(--brand);
+  --accent-ink:var(--brand-ink);
   --pad:clamp(1.25rem,5vw,4.5rem);
   --sect:clamp(3.25rem,7vw,6.5rem);
   --maxw:1180px;
@@ -23,7 +29,7 @@ button{font:inherit;cursor:pointer}
 :focus-visible{outline:2.5px solid var(--brand-ink);outline-offset:3px;border-radius:2px}
 .wrap{max-width:var(--maxw);margin:0 auto;padding-left:var(--pad);padding-right:var(--pad)}
 .mono{font-family:var(--fmono);font-size:.63rem;font-weight:400;letter-spacing:.14em;text-transform:uppercase;color:var(--stone)}
-.disp{font-family:var(--fdisp);font-weight:800;letter-spacing:-.03em;line-height:.94}
+.disp{font-family:var(--fdisp);font-weight:800;letter-spacing:var(--h-track);line-height:.94;text-transform:var(--h-case)}
 
 /* NAV */
 .nav{position:sticky;top:0;z-index:60;background:rgba(247,247,245,.86);backdrop-filter:blur(14px);border-bottom:1px solid var(--rule)}
@@ -31,11 +37,11 @@ button{font:inherit;cursor:pointer}
 .nav-links{display:none;gap:1.6rem;margin-left:auto;font-size:.9rem;font-weight:500}
 .nav-links a{text-decoration:none;color:var(--ink-2)}
 .nav-links a:hover{color:var(--ink)}
-.nav-cta{margin-left:auto;background:var(--brand-ink);color:#fff;text-decoration:none;font-family:var(--fmono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;padding:.7rem 1.05rem;border-radius:2px;white-space:nowrap}
+.nav-cta{margin-left:auto;background:var(--brand-ink);color:#fff;text-decoration:none;font-family:var(--fmono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;padding:.7rem 1.05rem;border-radius:var(--r);white-space:nowrap}
 @media(min-width:860px){.nav-links{display:flex}.nav-cta{margin-left:0}}
 .logo{display:flex;align-items:center;gap:.6rem;text-decoration:none;min-width:0}
 .logo-img{height:34px;width:auto}
-.logo-mark{width:34px;height:34px;flex:0 0 34px;border-radius:2px;background:var(--brand-ink);color:#fff;display:grid;place-items:center;font-family:var(--fdisp);font-weight:800;font-size:.95rem;letter-spacing:-.02em}
+.logo-mark{width:34px;height:34px;flex:0 0 34px;border-radius:var(--r);background:var(--brand-ink);color:#fff;display:grid;place-items:center;font-family:var(--fdisp);font-weight:800;font-size:.95rem;letter-spacing:-.02em}
 .logo-name{font-family:var(--fdisp);font-weight:800;font-size:1.02rem;letter-spacing:-.02em;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* HERO */
@@ -45,7 +51,7 @@ button{font:inherit;cursor:pointer}
 .hero h1 em{font-style:normal;color:var(--brand-ink);display:block}
 .hero-sub{margin:1.6rem 0 0;max-width:34ch;font-size:clamp(1rem,1.6vw,1.16rem);color:var(--ink-2)}
 .hero-acts{display:flex;flex-wrap:wrap;gap:.7rem;margin-top:2rem}
-.btn{border:0;border-radius:2px;padding:.95rem 1.4rem;text-decoration:none;font-family:var(--fmono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;display:inline-block}
+.btn{border:0;border-radius:var(--r);padding:.95rem 1.4rem;text-decoration:none;font-family:var(--fmono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;display:inline-block}
 .btn-primary{background:var(--brand-ink);color:#fff}
 .btn-primary:disabled{opacity:.55;cursor:not-allowed}
 .btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--ink)}
@@ -93,7 +99,7 @@ button{font:inherit;cursor:pointer}
 .form{background:var(--card);border:1px solid var(--rule);padding:clamp(1.2rem,3vw,1.9rem)}
 .field{margin-bottom:.85rem}
 .field label{display:block;margin-bottom:.35rem}
-.field input,.field textarea{width:100%;padding:.75rem .8rem;border:1px solid var(--rule);border-radius:2px;font:inherit;font-size:.95rem;background:var(--paper);color:var(--ink)}
+.field input,.field textarea{width:100%;padding:.75rem .8rem;border:1px solid var(--rule);border-radius:var(--r);font:inherit;font-size:.95rem;background:var(--paper);color:var(--ink)}
 .field textarea{min-height:82px;resize:vertical}
 .form .btn-primary{width:100%;padding:1rem}
 .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
@@ -326,7 +332,7 @@ body.has-dev{padding-bottom:78px}
 
 .bk-days{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:.5rem;margin-top:.8rem}
 .bk-day{
-  background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  background:var(--card);border:1px solid var(--rule);border-radius:var(--r);
   padding:.8rem .3rem;text-align:center;transition:border-color .15s ease,transform .15s ease;
 }
 .bk-day:hover{border-color:var(--brand-ink)}
@@ -338,7 +344,7 @@ body.has-dev{padding-bottom:78px}
 
 .bk-times{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:.5rem;margin-top:.8rem}
 .bk-time{
-  background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:.85rem .5rem;
+  background:var(--card);border:1px solid var(--rule);border-radius:var(--r);padding:.85rem .5rem;
   font-family:var(--fdisp);font-weight:600;font-size:1rem;letter-spacing:-.01em;
   transition:border-color .15s ease,transform .15s ease;
 }
@@ -457,3 +463,19 @@ body.has-dev{padding-bottom:78px}
   display:block;margin:1rem 0;padding:.7rem .85rem;background:#ffffff12;
   font-family:var(--fmono);font-size:.72rem;letter-spacing:.04em;word-break:break-all;
 }
+
+/* ============================================================
+   HERO LAYOUT VARIANTS
+   Content decides first (no photos -> text-only); a hash of the
+   business name breaks ties. Two prospects never see the same
+   arrangement, and nothing had to be generated to achieve it.
+   ============================================================ */
+.hero-split.lay-photo-left{direction:rtl}
+.hero-split.lay-photo-left>*{direction:ltr}
+@media(min-width:940px){
+  .hero-split.lay-photo-right{grid-template-columns:1.05fr .95fr}
+  .hero-split.lay-photo-left{grid-template-columns:.95fr 1.05fr}
+  .hero-split.lay-photo-below{grid-template-columns:1fr}
+}
+.hero-split.lay-photo-below .hero-photo img{aspect-ratio:21/9}
+.hero-split.lay-photo-below .hero-photo{margin-top:1.8rem}

@@ -2,6 +2,8 @@ import 'server-only';
 import * as cheerio from 'cheerio';
 import type { Tenant } from './types';
 import { isValidHex } from './theme';
+import { gatherSignals, discoverPages, type Signals } from './signals';
+import { readDesignDNA, type DesignDNA } from './designdna';
 
 /**
  * Server-side extraction.
@@ -84,6 +86,9 @@ export interface Draft {
   testimonials: { quote: string; author: string }[];
   credentials: string[];
   email: string;
+  rating: string;
+  reviewCount: number;
+  design: DesignDNA;
   notes: string[];
 }
 
@@ -164,7 +169,15 @@ function logoCandidates($: cheerio.CheerioAPI, base: string): { url: string; fro
  * themselves is looking at; if demos ever get shown to third parties,
  * mirror them to Blob instead.
  */
-const IMG_SKIP = /logo|icon|favicon|sprite|badge|avatar|placeholder|spacer|pixel|banner-ad|1x1|blank/i;
+const IMG_SKIP = /logo|icon|favicon|sprite|badge|avatar|placeholder|spacer|pixel|banner-ad|1x1|blank|loader|arrow|star|quote|flag|payment|visa|mastercard/i;
+const LAZY_ATTRS = ['src', 'data-src', 'data-lazy-src', 'data-original', 'data-lazy', 'data-echo'];
+
+/** srcset gives several widths; the last entry is the largest. */
+function fromSrcset(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  const last = v.split(',').pop()?.trim().split(/\s+/)[0];
+  return last || undefined;
+}
 const IMG_GOOD = /gallery|project|portfolio|work|photo|image|upload|wp-content|media|slide/i;
 
 function harvestImages($: cheerio.CheerioAPI, base: string, logoUrl: string | null): string[] {
@@ -179,12 +192,31 @@ function harvestImages($: cheerio.CheerioAPI, base: string, logoUrl: string | nu
   const scored: { url: string; score: number }[] = [];
   const seen = new Set<string>();
 
+  // <picture><source srcset> comes before <img>, and usually carries the
+  // better asset.
+  $('picture source[srcset]').each((_, el) => {
+    const raw = fromSrcset($(el).attr('srcset'));
+    if (!raw || raw.startsWith('data:')) return;
+    const url = abs(raw);
+    if (!url || seen.has(url) || IMG_SKIP.test(url) || /\.svg($|\?)/i.test(url)) return;
+    seen.add(url);
+    scored.push({ url, score: 4 });
+  });
+
   $('img').each((_, el) => {
     const $el = $(el);
-    // srcset gives the largest variant; take the last entry.
-    const srcset = $el.attr('srcset') ?? '';
-    const fromSet = srcset ? srcset.split(',').pop()?.trim().split(/\s+/)[0] : '';
-    const raw = fromSet || $el.attr('src') || $el.attr('data-src') || '';
+    // Lazy-loading themes park the real URL on a data attribute and leave
+    // src as a placeholder, so check srcset and every known variant.
+    let raw = fromSrcset($el.attr('srcset')) ?? fromSrcset($el.attr('data-srcset')) ?? '';
+    if (!raw) {
+      for (const a of LAZY_ATTRS) {
+        const v = $el.attr(a);
+        if (v && !v.startsWith('data:') && !/placeholder|blank/i.test(v)) {
+          raw = v;
+          break;
+        }
+      }
+    }
     if (!raw || raw.startsWith('data:')) return;
 
     const url = abs(raw);
@@ -265,22 +297,20 @@ async function pickLogo(cands: { url: string; from: string }[]): Promise<Tenant[
 
 /* ── Claude ───────────────────────────────────────────────────────── */
 
-const SYSTEM = `You extract structured facts about small trade businesses from their own website text.
+const SYSTEM = `You write short website copy for small trade businesses, and classify them, using only their own website text.
 
 Rules:
 - Output ONE JSON object, nothing else. No prose, no markdown fences.
 - Never invent facts. Use null or [] when something is not stated.
-- services: things the business says it does, in their words, lightly tidied, Title Case, 2-6 items. tag = price or basis if stated, else "".
 - headline: exactly two lines that read as one sentence. US English. Name the trade and the city. HARD LIMIT 34 characters per line — count them. No trailing punctuation on line one.
-- tagline: one or two plain sentences a tradesperson would recognise as their own, under 200 characters total. Never "premier", "leading" or "quality".
+- tagline: one or two plain sentences a tradesperson would recognise as their own, under 200 characters. Never "premier", "leading", "quality" or "solutions".
+- services: things the business says it does, in their words, lightly tidied, Title Case, 2-6 items. tag = price or basis if stated, else "".
 - nearby: up to 4 neighbourhoods or nearby towns they mention serving.
-- testimonials: up to 3 real customer reviews quoted from the page. quote must be VERBATIM from the text, trimmed to under 220 characters, ending at a sentence boundary. author is the reviewer's name if given, else "". Return [] if the page has no reviews — never invent one.
-- credentials: up to 4 short trust facts stated on the page, 3-5 words each. Examples: "Licensed & insured", "Family owned since 1994", "Free estimates", "BBB accredited". Return [] if none are stated.
-- email: a contact email address if one appears, else "".
-- work: real project names from the page if any are described, else [].
+- credentials: up to 4 short trust facts STATED on the page, 3-5 words each — "Licensed & insured", "Family owned since 1994", "Free estimates". Return [] if none are stated.
+- work: real project names described on the page, else [].
 - in_niche: true only for genuine carpentry, joinery, cabinetry, millwork or finish carpentry. A general contractor listing carpentry among twenty trades is false.`;
 
-const SHAPE = `{"company":"","short":"","headline":["",""],"tagline":"","city":"","nearby":[],"phone":"","email":"","since":null,"services":[{"name":"","tag":""}],"work":[{"title":"","where":""}],"testimonials":[{"quote":"","author":""}],"credentials":[""],"in_niche":true,"reject_reason":null}`;
+const SHAPE = `{"short":"","headline":["",""],"tagline":"","nearby":[],"services":[{"name":"","tag":""}],"work":[{"title":"","where":""}],"credentials":[""],"in_niche":true,"reject_reason":null}`;
 
 type AnalyseResult =
   | { ok: true; facts: Record<string, unknown> }
@@ -295,7 +325,7 @@ type AnalyseResult =
  * key. Direct fetch has no bundling surface and the failure modes are
  * visible.
  */
-async function analyse(text: string, hintName: string): Promise<AnalyseResult> {
+async function analyse(text: string, hintName: string, known: Signals): Promise<AnalyseResult> {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
   if (!key) return { ok: false, why: 'ANTHROPIC_API_KEY is not set on this deployment.' };
 
@@ -318,9 +348,12 @@ async function analyse(text: string, hintName: string): Promise<AnalyseResult> {
           {
             role: 'user',
             content:
-              `Business name hint: ${hintName || 'unknown'}\n\n` +
+              `Business: ${known.name ?? hintName ?? 'unknown'}\n` +
+              `City: ${known.city ?? 'unknown'}\n` +
+              (known.services.length ? `Known services: ${known.services.join(', ')}\n` : '') +
+              `\nThese facts are already confirmed — do not contradict them.\n\n` +
               `Return JSON matching exactly this shape:\n${SHAPE}\n\n` +
-              `Website text:\n---\n${text.slice(0, 14000)}\n---`
+              `Website text:\n---\n${text.slice(0, 12000)}\n---`
           }
         ]
       }),
@@ -372,7 +405,73 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
   const html = await res.text();
   const $ = cheerio.load(html);
 
-  // ── colour: a stated theme-color beats anything inferred ──
+  /* ── 1. Deterministic signals from the homepage ──────────────── */
+  const sig = gatherSignals($, url);
+
+  /* ── 2. Follow the site's own navigation, not guessed paths ──── */
+  const pages = discoverPages($, url, 4);
+  let extraText = '';
+
+  await Promise.all(
+    pages.map(async (p) => {
+      try {
+        const r = await fetch(p, { headers: UA, signal: AbortSignal.timeout(8000) });
+        if (!r.ok) return;
+        const $$ = cheerio.load(await r.text());
+        // Merge signals — a services page often carries the catalogue
+        // and a reviews page the testimonials.
+        const more = gatherSignals($$, p);
+        for (const k of ['phone', 'email', 'city', 'rating', 'logo'] as const) {
+          if (sig[k] === undefined && more[k] !== undefined) {
+            (sig as unknown as Record<string, unknown>)[k] = more[k];
+            sig.from[k] = `${more.from[k] ?? 'page'} (${new URL(p).pathname})`;
+          }
+        }
+        if (!sig.services.length && more.services.length) {
+          sig.services = more.services;
+          sig.from.services = `${more.from.services} (${new URL(p).pathname})`;
+        }
+        if (sig.reviews.length < 3 && more.reviews.length) {
+          sig.reviews = [...sig.reviews, ...more.reviews].slice(0, 3);
+          sig.from.reviews = more.from.reviews ?? 'page';
+        }
+        for (const im of more.images) if (!sig.images.includes(im)) sig.images.push(im);
+
+        const clone = cheerio.load($$.html());
+        clone('script, style, noscript, svg').remove();
+        extraText +=
+          '\n' + clone('body').text().split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+      } catch {
+        /* a subpage that will not load is not a failure */
+      }
+    })
+  );
+  if (pages.length) notes.push(`Read ${pages.length + 1} pages from their own navigation.`);
+
+  /* ── 3. Their stylesheets, for colour and design DNA ─────────── */
+  const cssParts: string[] = [];
+  $('style').each((_, el) => {
+    cssParts.push($(el).contents().text());
+  });
+  const sheets = $('link[rel="stylesheet"][href]')
+    .toArray()
+    .map((el) => $(el).attr('href'))
+    .filter((h): h is string => Boolean(h))
+    .slice(0, 4);
+  await Promise.all(
+    sheets.map(async (href) => {
+      try {
+        const u = new URL(href, url).href;
+        const r = await fetch(u, { headers: UA, signal: AbortSignal.timeout(7000) });
+        if (r.ok) cssParts.push((await r.text()).slice(0, 400_000));
+      } catch {
+        /* a stylesheet that will not load is not a failure */
+      }
+    })
+  );
+  const css = cssParts.join('\n');
+
+  /* ── 4. Colour ───────────────────────────────────────────────── */
   let primary = '';
   let colorFrom = '';
   const theme = $('meta[name="theme-color"]').attr('content')?.trim();
@@ -384,7 +483,7 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
     const weighted = ['header', 'nav', 'footer', 'style']
       .flatMap((sel) => $(sel).toArray().map((el) => $.html(el)))
       .join('\n');
-    const ranked = [...harvest(weighted + '\n' + html).entries()].sort((a, b) => b[1] - a[1]);
+    const ranked = [...harvest(weighted + '\n' + css + '\n' + html).entries()].sort((a, b) => b[1] - a[1]);
     for (const [hex] of ranked) {
       if (GENERIC.has(hex)) continue;
       if (usable(hex)) {
@@ -400,22 +499,11 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
     notes.push('No usable brand colour found — using a neutral default.');
   }
 
-  // Keep an unstripped copy: the text pass below removes <img>, and
-  // photos are harvested after it.
-  const $img = cheerio.load(html);
-
-  // ── text ──
-  $('script, style, noscript, svg').remove();
-  const text = $('body')
-    .text()
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .join('\n');
-
-  if (text.length < 200) {
-    notes.push('Very little text on the page — this may be a JavaScript-only site.');
-  }
+  /* ── 5. Text for the LLM ─────────────────────────────────────── */
+  const $text = cheerio.load(html);
+  $text('script, style, noscript, svg').remove();
+  const text =
+    $text('body').text().split('\n').map((l) => l.trim()).filter(Boolean).join('\n') + extraText;
 
   const host = new URL(url).hostname.replace(/^www\./, '');
   const guess = host
@@ -424,7 +512,39 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
-  const analysis = await analyse(text, guess);
+  /* ── 6. Logo: JSON-LD first, then the chain ──────────────────── */
+  let logo: Tenant['logo'] = { type: 'wordmark' };
+  if (sig.logo) {
+    const ok = await pickLogo([{ url: sig.logo, from: 'json-ld' as never }]);
+    if (ok.type === 'image') logo = ok;
+  }
+  if (logo.type === 'wordmark') logo = await pickLogo(logoCandidates($, url));
+  if (logo.type === 'wordmark') notes.push('No logo found — a wordmark will be generated.');
+
+  /* ── 7. Photos ───────────────────────────────────────────────── */
+  const harvested = harvestImages($text2(html), url, logo.type === 'image' ? logo.url : null);
+  const candidates = [...sig.images, ...harvested].filter((v, i, a) => a.indexOf(v) === i);
+  const images = await verifyImages(candidates);
+  notes.push(
+    images.length
+      ? `Found ${images.length} project photo${images.length === 1 ? '' : 's'}.`
+      : 'No usable project photos — the page will lead with reviews instead.'
+  );
+
+  /* ── 8. Their design language ────────────────────────────────── */
+  const slugGuess = slugify(sig.name ?? guess);
+  const design = readDesignDNA($, html, css, slugGuess, images.length);
+  const dnaBits = ['display', 'body', 'radius', 'accent', 'upper']
+    .filter((k) => design.from[k] && design.from[k] !== 'default')
+    .map((k) => k);
+  notes.push(
+    dnaBits.length
+      ? `Design mirrored from their site: ${dnaBits.join(', ')}. Hero: ${design.layout}.`
+      : `No design signals in their CSS — using defaults. Hero: ${design.layout}.`
+  );
+
+  /* ── 9. LLM: copy and classification only ────────────────────── */
+  const analysis = await analyse(text, guess, sig);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const facts: any = analysis.ok ? analysis.facts : null;
   if (!analysis.ok) notes.push(`Copy is generic — ${analysis.why}`);
@@ -432,41 +552,55 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
     notes.push(`Flagged as outside the niche: ${facts.reject_reason ?? 'no carpentry signals'}`);
   }
 
-  const logo = await pickLogo(logoCandidates($, url));
-  if (logo.type === 'wordmark') notes.push('No logo found — a wordmark will be generated.');
+  /* ── 8. Merge. Signals beat the model on every hard fact. ───── */
+  const company = sig.name ?? facts?.company ?? guess;
+  const city = sig.city ?? facts?.city ?? '';
 
-  // Their own project photos. Run after the logo so it can be excluded.
-  const images = await verifyImages(
-    harvestImages($img, url, logo.type === 'image' ? logo.url : null)
-  );
-  if (images.length) {
-    notes.push(`Found ${images.length} project photo${images.length === 1 ? '' : 's'}.`);
-  } else {
-    notes.push('No usable project photos — the page will lead with reviews instead.');
-  }
+  const services = (
+    sig.services.length
+      ? sig.services.map((n) => ({ name: n, tag: '' }))
+      : (facts?.services ?? [])
+          .filter((x: { name?: string }) => x?.name)
+          .map((x: { name: string; tag?: string }) => ({ name: x.name, tag: x.tag ?? '' }))
+  ).slice(0, 6);
 
-  const city: string = facts?.city ?? '';
-  const services = (facts?.services ?? [])
-    .filter((s: { name?: string }) => s && s.name)
-    .slice(0, 6)
-    .map((s: { name: string; tag?: string }) => ({ name: s.name, tag: s.tag ?? '' }));
+  const nearby = (sig.areas.length ? sig.areas : (facts?.nearby ?? [])).slice(0, 4);
+
+  const testimonials = sig.reviews
+    .filter((r) => r.quote.length > 25)
+    .slice(0, 3)
+    .map((r) => ({ quote: r.quote.slice(0, 240), author: r.author.slice(0, 60) }));
+
+  const credentials: string[] = [
+    ...(facts?.credentials ?? []).filter((c: string) => c && c.length < 40),
+    ...(sig.priceRange ? [sig.priceRange] : [])
+  ].slice(0, 4);
 
   const headline: [string, string] =
     Array.isArray(facts?.headline) && facts.headline.length === 2
       ? [String(facts.headline[0]), String(facts.headline[1])]
       : ['Custom carpentry', city ? `and cabinetry in ${city}` : 'and cabinetry'];
 
+  // Report what came from where — a demo built entirely on fallbacks is
+  // weaker than it looks, and that should be visible before it goes out.
+  const provenance = ['name', 'phone', 'city', 'services', 'reviews', 'rating']
+    .filter((k) => sig.from[k])
+    .map((k) => `${k}:${sig.from[k]}`);
+  if (provenance.length) notes.push(`Structured data: ${provenance.join(', ')}.`);
+  notes.push(`Colour via ${colorFrom}. Logo via ${logo.type === 'image' ? logo.from : 'generated wordmark'}.`);
+
   return {
-    company: facts?.company || guess,
-    short: String(facts?.short || shortName(facts?.company || guess)),
+    company,
+    short: String(facts?.short || shortName(company)),
     headline,
-    tagline: facts?.tagline ?? '',
+    tagline: facts?.tagline ?? sig.description?.slice(0, 300) ?? '',
     city,
-    nearby: (facts?.nearby ?? []).slice(0, 4),
-    phone: facts?.phone ?? '',
-    since: facts?.since ?? 0,
+    nearby,
+    phone: sig.phone ?? facts?.phone ?? '',
+    since: sig.founded ?? facts?.since ?? 0,
     logo,
-    colors: { primary },
+    colors: { primary, ...(design.accent ? { accent: design.accent } : {}) },
+    design,
     services: services.length
       ? services
       : [
@@ -479,21 +613,16 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
       .slice(0, 3)
       .map((w: { title: string; where?: string }) => ({ title: w.title, where: w.where || city })),
     images,
-    testimonials: (facts?.testimonials ?? [])
-      .filter((t: { quote?: string }) => t?.quote && t.quote.length > 20)
-      .slice(0, 3)
-      .map((t: { quote: string; author?: string }) => ({
-        quote: t.quote.slice(0, 240),
-        author: (t.author ?? '').slice(0, 60)
-      })),
-    credentials: (facts?.credentials ?? [])
-      .filter((c: string) => c && c.length < 40)
-      .slice(0, 4),
-    email: facts?.email ?? '',
-    notes: [
-      ...notes,
-      `Colour via ${colorFrom}.`,
-      `Logo via ${logo.type === 'image' ? logo.from : 'generated wordmark'}.`
-    ]
+    testimonials,
+    credentials,
+    email: sig.email ?? '',
+    rating: sig.rating ?? '',
+    reviewCount: sig.reviewCount ?? 0,
+    notes
   };
+}
+
+/** A second parse, because the text pass strips <img>. */
+function $text2(html: string): cheerio.CheerioAPI {
+  return cheerio.load(html);
 }

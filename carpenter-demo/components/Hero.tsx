@@ -15,7 +15,7 @@ export default function Hero({ tenant }: { tenant: Tenant }) {
   ].slice(0, 4);
   return (
     <header className="hero wrap" id="top">
-      <div className={lead ? 'hero-split' : undefined}>
+      <div className={lead ? `hero-split lay-${tenant.design?.layout ?? 'photo-right'}` : undefined}>
       <div>
       <div className="hero-rule" />
       <h1 className="disp">

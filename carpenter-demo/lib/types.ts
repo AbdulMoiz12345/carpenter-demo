@@ -21,6 +21,19 @@ export interface WorkItem {
   where: string;
 }
 
+export interface Design {
+  /** Google font family for headings. */
+  display: string;
+  /** Google font family for body copy. */
+  body: string;
+  /** Corner rounding in px. */
+  radius: number;
+  /** Do their headings shout? */
+  upper: boolean;
+  /** Hero arrangement. Deterministic per business. */
+  layout: 'photo-right' | 'photo-left' | 'photo-below' | 'text-only';
+}
+
 export interface Testimonial {
   quote: string;
   author: string;
@@ -71,7 +84,14 @@ export interface Tenant {
   reviews: number;
 
   logo: Logo;
-  colors: { primary: string };
+  colors: { primary: string; accent?: string };
+
+  /**
+   * Their own design language, read from their CSS. Mirroring what they
+   * already use is cheaper than generating a bespoke site and more
+   * convincing, because it resembles the site they recognise.
+   */
+  design?: Design;
 
   services: Service[];
   work: WorkItem[];

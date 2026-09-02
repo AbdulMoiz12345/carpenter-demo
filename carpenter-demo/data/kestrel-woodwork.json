@@ -55,5 +55,12 @@
   "images": [],
   "testimonials": [],
   "credentials": [],
-  "email": ""
+  "email": "",
+  "design": {
+    "display": "Bricolage Grotesque",
+    "body": "Instrument Sans",
+    "radius": 3,
+    "upper": false,
+    "layout": "photo-right"
+  }
 }

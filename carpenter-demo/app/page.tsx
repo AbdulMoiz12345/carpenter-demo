@@ -3,6 +3,7 @@ import { resolveTenant } from '@/lib/tenants';
 import { getLiveSlots } from '@/lib/ghl';
 import { seedFor } from '@/lib/seed';
 import { brandVars } from '@/lib/theme';
+import { fontHref } from '@/lib/designdna';
 
 import Nav from '@/components/Nav';
 import Hero from '@/components/Hero';

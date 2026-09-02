@@ -3,6 +3,7 @@ import { getBySlug } from '@/lib/store';
 import { getLiveSlots } from '@/lib/ghl';
 import { seedFor } from '@/lib/seed';
 import { brandVars } from '@/lib/theme';
+import { fontHref } from '@/lib/designdna';
 
 import Nav from '@/components/Nav';
 import Hero from '@/components/Hero';
@@ -29,7 +30,19 @@ export default async function DemoBySlug({ params }: { params: { slug: string } 
   const slots = live ?? seed.fallbackSlots;
 
   return (
-    <div style={brandVars(tenant.colors.primary) as React.CSSProperties}>
+    <div
+      style={
+        brandVars(tenant.colors.primary, {
+          accent: tenant.colors.accent,
+          design: tenant.design
+        }) as React.CSSProperties
+      }
+    >
+      {/* Their own typefaces, loaded per tenant. Only whitelisted
+          families reach fontHref, so the URL is always safe. */}
+      {tenant.design && (
+        <link rel="stylesheet" href={fontHref(tenant.design)} />
+      )}
       <Nav tenant={tenant} />
       <Hero tenant={tenant} />
       <Services tenant={tenant} />

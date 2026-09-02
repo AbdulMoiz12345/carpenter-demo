@@ -41,6 +41,16 @@ const Body = z.object({
   phone: clamp(40).default(''),
   email: z.string().email().max(160).optional().or(z.literal('')),
   primary: z.string().refine(isValidHex, 'hex colour like #7a4b24'),
+  accent: z.string().refine(isValidHex).optional(),
+  design: z
+    .object({
+      display: z.string().max(60),
+      body: z.string().max(60),
+      radius: z.number().min(0).max(18),
+      upper: z.boolean(),
+      layout: z.enum(['photo-right', 'photo-left', 'photo-below', 'text-only'])
+    })
+    .optional(),
   tagline: clamp(400).default(''),
   headline: z.tuple([clamp(60), clamp(60)]).optional(),
   nearby: z.array(clamp(60)).max(6).default([]),
@@ -50,6 +60,8 @@ const Body = z.object({
   images: z.array(z.string().url()).max(8).default([]),
   testimonials: z.array(z.object({ quote: clamp(240), author: clamp(60).default('') })).max(3).default([]),
   credentials: z.array(clamp(40)).max(4).default([]),
+  rating: clamp(8).default(''),
+  reviewCount: z.number().int().min(0).default(0),
   logo: z.union([
     z.object({ type: z.literal('wordmark') }),
     z.object({ type: z.literal('image'), url: z.string().url(), from: z.string().optional() })
@@ -96,10 +108,11 @@ export async function POST(req: Request) {
     nearby: d.nearby,
     phone: d.phone,
     since: d.since,
-    rating: '',
-    reviews: 0,
+    rating: d.rating,
+    reviews: d.reviewCount,
     logo: d.logo,
-    colors: { primary: d.primary },
+    colors: { primary: d.primary, ...(d.accent ? { accent: d.accent } : {}) },
+    design: d.design,
     services: d.services.length ? d.services : [
       { name: 'Custom cabinetry', tag: '' },
       { name: 'Built-ins and closets', tag: '' },
