@@ -98,7 +98,12 @@ export async function POST(req: Request) {
     status: 'ACTIVE' as const,
     source: 'website' as const,
     company: d.company,
-    short: d.short?.trim() || shortName(d.company),
+    // Trust an explicit edit, but only if it is actually short — the
+    // nav is the one place a bad value is most visible.
+    short:
+      d.short && d.short.trim().split(/\s+/).length <= 2 && d.short.trim().length <= 18
+        ? d.short.trim()
+        : shortName(d.company),
     headline: (d.headline ?? [
       'Custom carpentry',
       city ? `and cabinetry in ${city}` : 'and cabinetry'

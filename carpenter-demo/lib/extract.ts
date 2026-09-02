@@ -100,13 +100,24 @@ export interface Draft {
  * split on capitals where possible ("LoganConstruction" -> "Logan").
  */
 export function shortName(company: string): string {
-  const first = company.trim().split(/\s+/)[0];
-  if (first.length <= 18) return first;
+  const clean = company.trim().replace(/\s+/g, ' ');
 
-  const parts = first.replace(/([a-z])([A-Z])/g, '$1 $2').split(' ');
+  const words = clean.split(' ');
+  const first = words[0] ?? '';
+  if (!first) return 'Demo';
+
+  // Two words read better than one when the first is an initial or a
+  // number: "M. Hale" rather than "M.", "360 Carpentry" rather than "360".
+  const stub = first.replace(/[.\-]/g, '');
+  const base = (stub.length <= 3 || /^\d+$/.test(stub)) && words[1] ? `${first} ${words[1]}` : first;
+
+  if (base.length <= 18) return base;
+
+  // A run-on hostname guess: split on an internal capital if there is one.
+  const parts = base.replace(/([a-z])([A-Z])/g, '$1 $2').split(' ');
   if (parts.length > 1 && parts[0].length >= 3) return parts[0];
 
-  return first;
+  return base.slice(0, 18);
 }
 
 export function slugify(name: string): string {
@@ -125,60 +136,145 @@ export function slugify(name: string): string {
 
 /* ── the logo chain ───────────────────────────────────────────────── */
 
+/**
+ * Containers a logo actually lives in. Matching only <header> and <nav>
+ * missed most real sites: WordPress uses .site-branding, Elementor uses
+ * .elementor-widget-theme-site-logo, Squarespace .header-title-logo, and
+ * plenty of themes just use a div called .masthead.
+ */
+const HEADER_SEL = [
+  'header', 'nav', '.header', '#header', '.site-header', '#masthead', '.masthead',
+  '.navbar', '.site-branding', '.branding', '.logo', '.site-logo', '.custom-logo-link',
+  '.header-title-logo', '[class*="site-logo"]', '[class*="header-logo"]',
+  '[class*="theme-site-logo"]', '[id*="logo"]'
+].join(', ');
+
+/** Words that mean "this image is the brand", not just any picture. */
+const LOGO_HINT = /logo|brand|identity|masthead|wordmark|lockup/i;
+
 function logoCandidates($: cheerio.CheerioAPI, base: string): { url: string; from: string }[] {
-  const abs = (s: string) => {
+  const abs = (v: string) => {
     try {
-      return new URL(s, base).href;
+      return new URL(v, base).href;
     } catch {
       return '';
     }
   };
   const out: { url: string; from: string }[] = [];
+  const push = (u: string, from: string) => {
+    if (u) out.push({ url: u, from });
+  };
 
+  // 1. apple-touch-icon — usually a clean square PNG at a usable size.
   $('link[rel*="apple-touch-icon"]').each((_, el) => {
     const h = $(el).attr('href');
-    if (h) out.push({ url: abs(h), from: 'apple-touch-icon' });
+    if (h) push(abs(h), 'apple-touch-icon');
   });
+
+  // 2. Declared icons, largest first. A 16px favicon rendered at 34px
+  //    looks worse than a generated wordmark, so small ones are skipped.
+  const icons: { url: string; size: number }[] = [];
+  $('link[rel~="icon"], link[rel="shortcut icon"]').each((_, el) => {
+    const h = $(el).attr('href');
+    if (!h) return;
+    const sizes = $(el).attr('sizes') ?? '';
+    const size = Number(sizes.split('x')[0]) || (/\.svg($|\?)/i.test(h) ? 512 : 0);
+    icons.push({ url: abs(h), size });
+  });
+  for (const i of icons.sort((a, b) => b.size - a.size)) {
+    if (i.size >= 96) push(i.url, 'icon-link');
+  }
+
+  // 3. An <img> in anything header-shaped. Broadened well beyond
+  //    <header>/<nav>, which is what was missing most logos.
+  $(HEADER_SEL).find('img').each((_, el) => {
+    const $el = $(el);
+    const src =
+      $el.attr('src') ?? $el.attr('data-src') ?? fromSrcset($el.attr('srcset')) ?? '';
+    if (!src || src.startsWith('data:')) return;
+    const hay = [src, $el.attr('alt') ?? '', $el.attr('class') ?? ''].join(' ');
+    // Inside a branding container, the first image usually IS the logo,
+    // so a hint is a bonus rather than a requirement.
+    push(abs(src), LOGO_HINT.test(hay) ? 'header-logo' : 'header-img');
+  });
+
+  // 4. Anywhere on the page, if it names itself.
+  $('img').each((_, el) => {
+    const $el = $(el);
+    const src = $el.attr('src') ?? $el.attr('data-src') ?? '';
+    if (!src || src.startsWith('data:')) return;
+    const hay = [src, $el.attr('alt') ?? '', $el.attr('class') ?? '', $el.attr('id') ?? ''].join(' ');
+    if (LOGO_HINT.test(hay)) push(abs(src), 'named-logo');
+  });
+
+  // 5. CSS background images on branding elements — how a lot of themes
+  //    and page builders serve a logo.
+  $(HEADER_SEL).each((_, el) => {
+    const style = $(el).attr('style') ?? '';
+    const m = style.match(/background(?:-image)?\s*:[^;]*url\((['"]?)([^'")]+)\1\)/i);
+    if (m) push(abs(m[2]), 'css-background');
+  });
+
+  // 6. og:image LAST among images. It is the social share card, which for
+  //    a trade business is normally a project photo rather than a logo —
+  //    so it must not outrank an actual logo.
   $('meta[property="og:image"]').each((_, el) => {
     const c = $(el).attr('content');
-    if (c) out.push({ url: abs(c), from: 'og-image' });
-  });
-  $('header img, nav img').each((_, el) => {
-    const src = $(el).attr('src') ?? '';
-    const hay = [src, $(el).attr('alt') ?? '', $(el).attr('class') ?? ''].join(' ').toLowerCase();
-    if (src && hay.includes('logo')) out.push({ url: abs(src), from: 'header-img' });
-  });
-  $('img').each((_, el) => {
-    const src = $(el).attr('src') ?? '';
-    if (src.toLowerCase().includes('logo')) out.push({ url: abs(src), from: 'header-img' });
+    if (c) push(abs(c), 'og-image');
   });
 
   const seen = new Set<string>();
-  return out.filter((c) => c.url && !seen.has(c.url) && seen.add(c.url)).slice(0, 6);
+  return out.filter((c) => c.url && !seen.has(c.url) && seen.add(c.url)).slice(0, 12);
 }
 
 /**
- * PROJECT PHOTOS
- *
+ * Inline SVG logos cannot be linked to, so serialise one to a data URI.
+ * Scripts and event handlers are stripped: an SVG is executable, and this
+ * one ends up in an <img> on a page we serve.
+ */
+function inlineSvgLogo($: cheerio.CheerioAPI): string | null {
+  let found: string | null = null;
+  $(HEADER_SEL).find('svg').each((_, el) => {
+    if (found) return;
+    const $el = $(el);
+    // Skip icon-sized glyphs — hamburgers, chevrons, social marks.
+    const vb = ($el.attr('viewBox') ?? '').split(/[\s,]+/).map(Number);
+    const w = vb[2] || Number($el.attr('width')) || 0;
+    if (w && w < 40) return;
+    if ($el.find('script').length) return;
+
+    let markup = $.html($el);
+    if (markup.length > 40_000) return;
+    markup = markup.replace(/\son\w+\s*=\s*(['"])[^'"]*\1/gi, '');
+    if (!/xmlns=/.test(markup)) {
+      markup = markup.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+    found = 'data:image/svg+xml;base64,' + Buffer.from(markup, 'utf8').toString('base64');
+  });
+  return found;
+}
+
+/* ── project photos ─────────────────────────────────────────────── */
+
+/**
  * The weakest thing a demo can show is an empty photo slot. A carpenter's
  * own site is usually full of project shots, so use theirs — their work,
- * shown back to them, is the strongest possible signal the page was made
- * for them.
+ * shown back to them, is the strongest signal the page was made for them.
  *
- * These are hotlinked rather than copied. Fine for a demo the owner
- * themselves is looking at; if demos ever get shown to third parties,
- * mirror them to Blob instead.
+ * Hotlinked rather than copied. Fine for a demo the owner themselves is
+ * looking at; mirror to Blob before showing demos to third parties.
  */
-const IMG_SKIP = /logo|icon|favicon|sprite|badge|avatar|placeholder|spacer|pixel|banner-ad|1x1|blank|loader|arrow|star|quote|flag|payment|visa|mastercard/i;
+const IMG_SKIP =
+  /logo|icon|favicon|sprite|badge|avatar|placeholder|spacer|pixel|banner-ad|1x1|blank|loader|arrow|star|quote|flag|payment|visa|mastercard/i;
+const IMG_GOOD = /gallery|project|portfolio|work|photo|image|upload|wp-content|media|slide/i;
 const LAZY_ATTRS = ['src', 'data-src', 'data-lazy-src', 'data-original', 'data-lazy', 'data-echo'];
 
-/** srcset gives several widths; the last entry is the largest. */
+/** srcset lists several widths; the last entry is the largest. */
 function fromSrcset(v: string | undefined): string | undefined {
   if (!v) return undefined;
   const last = v.split(',').pop()?.trim().split(/\s+/)[0];
   return last || undefined;
 }
-const IMG_GOOD = /gallery|project|portfolio|work|photo|image|upload|wp-content|media|slide/i;
 
 function harvestImages($: cheerio.CheerioAPI, base: string, logoUrl: string | null): string[] {
   const abs = (u: string) => {
@@ -192,7 +288,7 @@ function harvestImages($: cheerio.CheerioAPI, base: string, logoUrl: string | nu
   const scored: { url: string; score: number }[] = [];
   const seen = new Set<string>();
 
-  // <picture><source srcset> comes before <img>, and usually carries the
+  // <picture><source srcset> comes before <img> and usually carries the
   // better asset.
   $('picture source[srcset]').each((_, el) => {
     const raw = fromSrcset($(el).attr('srcset'));
@@ -221,20 +317,22 @@ function harvestImages($: cheerio.CheerioAPI, base: string, logoUrl: string | nu
 
     const url = abs(raw);
     if (!url || seen.has(url) || url === logoUrl) return;
-    if (/\.svg($|\?)/i.test(url)) return;         // icons, not photos
+    if (/\.svg($|\?)/i.test(url)) return; // icons, not photos
     if (IMG_SKIP.test(url)) return;
 
     const alt = $el.attr('alt') ?? '';
     const w = Number($el.attr('width') ?? 0);
     const h = Number($el.attr('height') ?? 0);
-    if ((w && w < 200) || (h && h < 150)) return;   // thumbnails and icons
+    if ((w && w < 200) || (h && h < 150)) return; // thumbnails and icons
 
     let score = 0;
     if (IMG_GOOD.test(url)) score += 3;
     if (alt.length > 4 && !IMG_SKIP.test(alt)) score += 2;
     if (w >= 600 || h >= 400) score += 2;
     // Sections that exist to show work.
-    if ($el.closest('[class*="gallery"], [class*="portfolio"], [class*="project"], [id*="gallery"]').length) score += 4;
+    if ($el.closest('[class*="gallery"], [class*="portfolio"], [class*="project"], [id*="gallery"]').length) {
+      score += 4;
+    }
 
     seen.add(url);
     scored.push({ url, score });
@@ -242,9 +340,9 @@ function harvestImages($: cheerio.CheerioAPI, base: string, logoUrl: string | nu
 
   // Also pick up CSS background images, which is how many themes do heroes.
   $('[style*="background-image"]').each((_, el) => {
-    const m = ($(el).attr('style') ?? '').match(/url\(['"]?([^'")]+)/);
+    const m = ($(el).attr('style') ?? '').match(/url\((['"]?)([^'")]+)\1\)/);
     if (!m) return;
-    const url = abs(m[1]);
+    const url = abs(m[2]);
     if (!url || seen.has(url) || IMG_SKIP.test(url) || /\.svg($|\?)/i.test(url)) return;
     seen.add(url);
     scored.push({ url, score: 2 });
@@ -283,7 +381,10 @@ async function pickLogo(cands: { url: string; from: string }[]): Promise<Tenant[
       const r = await fetch(c.url, { headers: UA, signal: AbortSignal.timeout(6000) });
       if (!r.ok) continue;
       const type = r.headers.get('content-type') ?? '';
-      if (!type.startsWith('image/')) continue;
+      const looksImage = /\.(png|jpe?g|webp|svg|gif|avif|ico)($|\?)/i.test(c.url);
+      // Some servers serve images as octet-stream; the extension is a
+      // better signal than a lazily configured content-type header.
+      if (!type.startsWith('image/') && !looksImage) continue;
       const len = Number(r.headers.get('content-length') ?? 0);
       if (len && len < 500) continue; // a favicon in disguise
       return { type: 'image', url: c.url, from: c.from as never };
@@ -310,7 +411,7 @@ Rules:
 - work: real project names described on the page, else [].
 - in_niche: true only for genuine carpentry, joinery, cabinetry, millwork or finish carpentry. A general contractor listing carpentry among twenty trades is false.`;
 
-const SHAPE = `{"short":"","headline":["",""],"tagline":"","nearby":[],"services":[{"name":"","tag":""}],"work":[{"title":"","where":""}],"credentials":[""],"in_niche":true,"reject_reason":null}`;
+const SHAPE = `{"headline":["",""],"tagline":"","nearby":[],"services":[{"name":"","tag":""}],"work":[{"title":"","where":""}],"credentials":[""],"in_niche":true,"reject_reason":null}`;
 
 type AnalyseResult =
   | { ok: true; facts: Record<string, unknown> }
@@ -519,7 +620,13 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
     if (ok.type === 'image') logo = ok;
   }
   if (logo.type === 'wordmark') logo = await pickLogo(logoCandidates($, url));
-  if (logo.type === 'wordmark') notes.push('No logo found — a wordmark will be generated.');
+  if (logo.type === 'wordmark') {
+    const svg = inlineSvgLogo($);
+    if (svg) logo = { type: 'image', url: svg, from: 'inline-svg' as never };
+  }
+  if (logo.type === 'wordmark') {
+    notes.push('No logo found — a wordmark will be generated.');
+  }
 
   /* ── 7. Photos ───────────────────────────────────────────────── */
   const harvested = harvestImages($text2(html), url, logo.type === 'image' ? logo.url : null);
@@ -591,7 +698,10 @@ export async function extractFromUrl(rawUrl: string): Promise<Draft> {
 
   return {
     company,
-    short: String(facts?.short || shortName(company)),
+    // Always derived, never asked for. When `short` was part of the
+    // model's output it once came back as headline text, which then
+    // appeared as the business name in the nav.
+    short: shortName(company),
     headline,
     tagline: facts?.tagline ?? sig.description?.slice(0, 300) ?? '',
     city,
